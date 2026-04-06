@@ -44,23 +44,33 @@ export async function focusGhosttyTerminal(
  * then finding and focusing the terminal with that marker via AppleScript.
  */
 function buildLabel(workingDirectory: string, gitBranch?: string, gitWorktree?: string): string {
-  const repo = workingDirectory.split("/").pop() ?? "";
-  const suffix = gitWorktree ?? gitBranch ?? "";
+  const repo = sanitize(workingDirectory.split("/").pop() ?? "");
+  const suffix = sanitize(gitWorktree ?? gitBranch ?? "");
   const rand = Math.random().toString(36).slice(2, 5);
   return suffix ? `${repo}/${suffix} · ${rand}` : `${repo} · ${rand}`;
 }
 
+/** Strip shell/AppleScript metacharacters — only allow safe chars in marker */
+function sanitize(s: string): string {
+  return s.replace(/[^a-zA-Z0-9._\-/ ]/g, "");
+}
+
 async function focusByTty(tty: string, label: string): Promise<boolean> {
+  // Validate TTY format to prevent path traversal
+  if (!/^ttys\d+$/.test(tty)) return false;
+
   const marker = label;
   try {
-    // Write OSC sequence to set terminal title to our marker
-    await exec("/bin/sh", ["-c", `printf '\\033]0;${marker}\\007' > /dev/${tty}`]);
+    // Write OSC sequence to set terminal title to our marker.
+    // Use writeFile instead of shell to avoid command injection.
+    const { writeFile } = await import("fs/promises");
+    await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
     // Give Ghostty a moment to process
     await new Promise((r) => setTimeout(r, 100));
 
     const script = `
 tell application "Ghostty"
-  set matches to every terminal whose name is "${marker}"
+  set matches to every terminal whose name is "${escapeForAppleScript(marker)}"
   if (count of matches) > 0 then
     focus item 1 of matches
     return "ok"

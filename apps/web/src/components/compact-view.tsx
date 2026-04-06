@@ -2,8 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSession } from "../context/session-context";
 import { contextPercent } from "../context/types";
 import type { BuddyColor } from "../lib/colors";
-import { buddyColorFromSessions, buddyTraitsFromId } from "../lib/colors";
-import { MAIN_COLORS } from "../lib/colors";
+import { buddyTraitsFromId, MAIN_COLORS } from "../lib/colors";
 import PixelBuddy from "./pixel-buddy";
 
 interface Props {
@@ -16,10 +15,6 @@ export default function CompactView({ notchWidth }: Props) {
   const heroSession = state.heroSessionId ? sessions[state.heroSessionId] : undefined;
   const sessionCount = Object.keys(sessions).length;
   const isJump = state.panelState === "jump";
-
-  const hasWorkingSessions = Object.values(sessions).some(
-    (s) => s.status === "active" && s.cpuPercent >= 2.0,
-  );
 
   const notchGap = notchWidth + 16;
   const heroPct = heroSession ? contextPercent(heroSession) : 0;

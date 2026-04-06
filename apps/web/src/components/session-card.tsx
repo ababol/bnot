@@ -12,14 +12,6 @@ interface Props {
   onClick: () => void;
 }
 
-const STATUS_COLORS: Record<SessionStatus, string> = {
-  active: "bg-buddy-green",
-  waitingApproval: "bg-buddy-orange",
-  waitingAnswer: "bg-buddy-orange",
-  completed: "bg-buddy-green",
-  error: "bg-buddy-red",
-};
-
 const STATUS_TEXT_COLORS: Record<SessionStatus, string> = {
   active: "text-buddy-green",
   waitingApproval: "text-buddy-orange",
