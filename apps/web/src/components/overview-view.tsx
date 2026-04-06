@@ -23,8 +23,11 @@ export default function OverviewView({ notchHeight }: Props) {
   };
 
   const handleSessionClick = (sessionId: string) => {
-    invoke("jump_to_session", { sessionId });
-    close();
+    // Close panel FIRST so it doesn't steal focus from the terminal
+    dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
+    invoke("set_panel_state", { state: "compact" });
+    // Then jump — slight delay lets the panel shrink before activating terminal
+    setTimeout(() => invoke("jump_to_session", { sessionId }), 80);
   };
 
   return (

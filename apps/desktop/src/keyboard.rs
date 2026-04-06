@@ -54,9 +54,11 @@ pub fn send_goto_tab(tab: u16) {
 pub fn navigate_pane(reset_count: u16, forward_count: u16) {
     for _ in 0..reset_count {
         send_key(KVK_ANSI_LEFT_BRACKET, CGEventFlags::CGEventFlagCommand);
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
     for _ in 0..forward_count {
         send_key(KVK_ANSI_RIGHT_BRACKET, CGEventFlags::CGEventFlagCommand);
+        std::thread::sleep(std::time::Duration::from_millis(20));
     }
 }
 

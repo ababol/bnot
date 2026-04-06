@@ -75,6 +75,11 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-white">
           {session.taskName ?? dirName}
         </div>
+        {(session.gitWorktree || session.gitBranch) && (
+          <div className="shrink-0 truncate max-w-[100px] font-mono text-[10px] text-text-dim">
+            {session.gitWorktree ? `~${session.gitWorktree}` : session.gitBranch}
+          </div>
+        )}
         <div className="shrink-0 font-mono text-[10px] text-text-dim">
           {formatDuration(session.startedAt)}
         </div>

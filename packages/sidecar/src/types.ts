@@ -97,6 +97,8 @@ export interface AgentSession {
   tty?: string;
   processPid?: number;
   cpuPercent: number;
+  gitBranch?: string;
+  gitWorktree?: string;
 }
 
 // IPC protocol between Tauri and sidecar

@@ -11,6 +11,8 @@ interface ProcessInfo {
   terminal: string | null;
   tty: string | null;
   cpuPercent: number;
+  gitBranch: string | null;
+  gitWorktree: string | null;
 }
 
 export class ProcessScanner {
@@ -50,6 +52,8 @@ export class ProcessScanner {
           cpuPercent: 0,
           tty: info.tty ?? undefined,
           processPid: info.pid,
+          gitBranch: info.gitBranch ?? undefined,
+          gitWorktree: info.gitWorktree ?? undefined,
         };
         if (!this.sm.heroSessionId) this.sm.heroSessionId = sessionId;
       }
@@ -58,6 +62,8 @@ export class ProcessScanner {
       this.sm.sessions[sessionId].tty = info.tty ?? undefined;
       this.sm.sessions[sessionId].processPid = info.pid;
       this.sm.sessions[sessionId].cpuPercent = info.cpuPercent;
+      this.sm.sessions[sessionId].gitBranch = info.gitBranch ?? undefined;
+      this.sm.sessions[sessionId].gitWorktree = info.gitWorktree ?? undefined;
     }
 
     const activePidSet = new Set(activePids.map((p) => `proc-${p.pid}`));
@@ -73,7 +79,8 @@ export class ProcessScanner {
       }
     }
 
-    // Dedup by cwd
+    // Dedup by cwd: only merge a proc- session with a non-proc (hook-based) session.
+    // Never merge two proc- sessions — they're genuinely separate Claude instances.
     const seenCwds: Record<string, string> = {};
     const sortedIds = Object.keys(this.sm.sessions).sort();
 
@@ -87,6 +94,12 @@ export class ProcessScanner {
         const existingIsProc = existingId.startsWith("proc-");
         const newIsProc = id.startsWith("proc-");
 
+        // Don't merge two proc- sessions (multiple Claude instances in same dir)
+        if (existingIsProc && newIsProc) {
+          continue;
+        }
+
+        // Prefer hook-based session over proc- session
         const keepId = existingIsProc && !newIsProc ? id : existingId;
         const removeId = keepId === existingId ? id : existingId;
 
@@ -146,29 +159,35 @@ export class ProcessScanner {
   }
 
   private async findClaudeProcesses(): Promise<ProcessInfo[]> {
-    let pgrepOutput: string;
+    // Use ps instead of pgrep — pgrep silently misses some processes on macOS
+    let psOutput: string;
     try {
-      const { stdout } = await exec("/usr/bin/pgrep", ["-fl", "claude"]);
-      pgrepOutput = stdout;
+      const { stdout } = await exec("/bin/ps", ["-eo", "pid,comm,args"]);
+      psOutput = stdout;
     } catch {
       return [];
     }
 
     const results: ProcessInfo[] = [];
-    const lines = pgrepOutput.trim().split("\n").filter(Boolean);
+    const lines = psOutput.trim().split("\n").filter(Boolean);
 
     for (const line of lines) {
-      const spaceIdx = line.indexOf(" ");
-      if (spaceIdx === -1) continue;
-      const pid = parseInt(line.substring(0, spaceIdx));
-      const cmdLine = line.substring(spaceIdx + 1);
+      const cols = line.trim().split(/\s+/);
+      if (cols.length < 3) continue;
+      const pid = parseInt(cols[0]);
+      const comm = cols[1];
+      const args = cols.slice(2).join(" ");
 
       if (isNaN(pid)) continue;
+
+      // Only match processes whose executable is "claude"
+      const commBase = comm.split("/").pop() ?? "";
+      if (commBase !== "claude") continue;
+
+      const cmdLine = `${comm} ${args}`;
       if (/BuddyBridge|VibeBridge|BuddyNotch|pgrep|claude-code-guide/.test(cmdLine)) continue;
-      if (cmdLine.includes("node") && !cmdLine.includes("claude")) continue;
       if (cmdLine.includes("--print") || cmdLine.includes("--output-format")) continue;
       if (cmdLine.includes("--resume") && cmdLine.includes("--no-session")) continue;
-      if (!cmdLine.includes("claude")) continue;
 
       const [parentPid, cwd, tty, cpu] = await Promise.all([
         this.getParentPid(pid),
@@ -179,8 +198,12 @@ export class ProcessScanner {
 
       if (!cwd || cwd === "/") continue;
 
-      const terminal = await this.getTerminal(parentPid);
-      results.push({ pid, parentPid, cwd, terminal, tty, cpuPercent: cpu });
+      const [terminal, gitBranch, gitWorktree] = await Promise.all([
+        this.getTerminal(parentPid),
+        this.getGitBranch(cwd),
+        this.getGitWorktree(cwd),
+      ]);
+      results.push({ pid, parentPid, cwd, terminal, tty, cpuPercent: cpu, gitBranch, gitWorktree });
     }
 
     return results;
@@ -231,6 +254,32 @@ export class ProcessScanner {
     } catch {
       return 0;
     }
+  }
+
+  private async getGitBranch(cwd: string): Promise<string | null> {
+    try {
+      const { stdout } = await exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"]);
+      const branch = stdout.trim();
+      return branch || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async getGitWorktree(cwd: string): Promise<string | null> {
+    try {
+      const [gitDir, commonDir] = await Promise.all([
+        exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-dir"]).then((r) => r.stdout.trim()),
+        exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-common-dir"]).then((r) => r.stdout.trim()),
+      ]);
+      // If they differ, this is a worktree — name is the cwd basename
+      if (gitDir !== commonDir) {
+        return cwd.split("/").pop() ?? null;
+      }
+    } catch {
+      // not a git repo
+    }
+    return null;
   }
 
   private async getTerminal(parentPid: number): Promise<string | null> {

@@ -23,14 +23,21 @@ pub fn run() {
         .setup(|app| {
             let win = app.get_webview_window("main").expect("main window");
 
+            // Read notch geometry BEFORE setting Accessory policy,
+            // as macOS may not report auxiliaryTopLeftArea for accessory apps.
+            let geom = notch::get_notch_geometry();
+            eprintln!("[setup] notch geometry: {:?}", geom);
+
             window::configure_macos_window(&win);
 
             // Position at notch using logical coordinates
-            if let Some(geom) = notch::get_notch_geometry() {
-                let (x, w, h) = window::compact_frame(&geom);
+            if let Some(ref geom) = geom {
+                let (x, w, h) = window::compact_frame(geom);
+                eprintln!("[setup] positioning at x={}, w={}, h={}", x, w, h);
                 let _ = win.set_position(tauri::LogicalPosition::new(x, 0.0));
                 let _ = win.set_size(tauri::LogicalSize::new(w, h));
             } else {
+                eprintln!("[setup] no notch detected, using fallback position");
                 let _ = win.set_position(tauri::LogicalPosition::new(500.0, 0.0));
                 let _ = win.set_size(tauri::LogicalSize::new(300.0, 32.0));
             }

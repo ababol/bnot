@@ -36,6 +36,8 @@ export interface AgentSession {
   tty?: string;
   processPid?: number;
   cpuPercent: number;
+  gitBranch?: string;
+  gitWorktree?: string;
 }
 
 // Derived helpers

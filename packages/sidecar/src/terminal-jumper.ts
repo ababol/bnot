@@ -1,11 +1,10 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { GhosttyTabMapper } from "./ghostty-tab-mapper.js";
+import { focusGhosttyTerminal } from "./ghostty-tab-mapper.js";
 import { emit } from "./ipc.js";
 import type { AgentSession } from "./types.js";
 
 const exec = promisify(execFile);
-const ghosttyMapper = new GhosttyTabMapper();
 
 export async function jumpToSession(session: AgentSession) {
   const terminal = (session.terminalApp ?? (await detectRunningTerminal())).toLowerCase();
@@ -22,36 +21,13 @@ export async function jumpToSession(session: AgentSession) {
 }
 
 async function jumpToGhostty(session: AgentSession) {
-  const tty = session.tty;
-  if (!tty) {
+  // Use Ghostty's native AppleScript API to focus the terminal by working directory.
+  // This handles tabs, splits, and pane focus in one call.
+  const focused = await focusGhosttyTerminal(session.workingDirectory);
+
+  if (!focused) {
+    // Fallback: just activate Ghostty
     emit("tauriCommand", { method: "activate_app", params: { bundleId: "com.mitchellh.ghostty" } });
-    return;
-  }
-
-  // Refresh mapper
-  const ghosttyPid = await findGhosttyPid();
-  if (ghosttyPid > 0) {
-    await ghosttyMapper.refresh(ghosttyPid);
-  }
-
-  const mapping = ghosttyMapper.lookup(tty);
-
-  // Activate Ghostty
-  emit("tauriCommand", { method: "activate_app", params: { bundleId: "com.mitchellh.ghostty" } });
-
-  if (mapping) {
-    // Wait for activation, then send keystrokes
-    // These will be forwarded to Tauri commands via IPC
-    setTimeout(() => {
-      emit("tauriCommand", { method: "send_goto_tab", params: { tab: mapping.tab } });
-
-      setTimeout(() => {
-        emit("tauriCommand", {
-          method: "navigate_pane",
-          params: { resetCount: 5, forwardCount: mapping.pane },
-        });
-      }, 100);
-    }, 50);
   }
 }
 
@@ -80,23 +56,7 @@ end tell`;
   }
 }
 
-async function findGhosttyPid(): Promise<number> {
-  try {
-    const { stdout } = await exec("/bin/ps", ["-eo", "pid,comm"]);
-    for (const line of stdout.split("\n")) {
-      const cols = line.trim().split(/\s+/);
-      if (cols.length >= 2 && cols[1].endsWith("/ghostty")) {
-        return parseInt(cols[0]) || 0;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return 0;
-}
-
 async function detectRunningTerminal(): Promise<string> {
-  // Check which terminal is running by looking for known processes
   try {
     const { stdout } = await exec("/bin/ps", ["-eo", "comm"]);
     if (stdout.includes("ghostty")) return "ghostty";

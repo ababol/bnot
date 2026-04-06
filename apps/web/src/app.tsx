@@ -13,10 +13,10 @@ interface NotchGeometry {
 
 function AppInner() {
   const [geometry, setGeometry] = useState<NotchGeometry | null>(null);
-  const { dispatch } = useSession();
+  const { state, dispatch } = useSession();
 
-  // Listen for sidecar events
-  useTauriEvents(dispatch);
+  // Listen for sidecar events + auto-collapse on blur
+  useTauriEvents(dispatch, state.panelState);
 
   useEffect(() => {
     invoke<NotchGeometry | null>("get_notch_geometry").then((g) => {
