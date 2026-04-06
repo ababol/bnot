@@ -1,3 +1,19 @@
-.build
-node_modules
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+
+# macOS
 .DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Tauri
+apps/desktop/gen/
+
+# Sidecar
+packages/sidecar/dist/

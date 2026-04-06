@@ -2,104 +2,130 @@
 
 ## Project Overview
 
-BuddyNotch is a native Swift macOS notch-panel app that monitors Claude Code sessions. It lives in the MacBook notch area as a pixel-art buddy character that shows context usage, session count, and lets you jump to specific terminal tabs/panes.
+BuddyNotch is a macOS notch-panel app that monitors Claude Code sessions. It lives in the MacBook notch area as a pixel-art buddy character that shows context usage, session count, and lets you jump to specific terminal tabs/panes.
 
-## Build
+Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4 + Node.js sidecar.
+
+## Build & Run
 
 ```bash
-swift build              # Debug build
-swift build -c release   # Release build
-swift run BuddyNotch     # Run the app
+pnpm dev               # Development (Vite HMR + Rust)
+pnpm build             # Production build (.app bundle)
+pnpm format            # Prettier + organize imports
+cargo check            # Check Rust workspace only
 ```
 
-Requires macOS 14+ and Swift 6.0 toolchain. Uses `.swiftLanguageMode(.v5)` to avoid strict concurrency issues.
+Requires: macOS 14+, Rust (rustup), Node.js 22+, pnpm.
 
 ## Project Structure
 
-Three SPM targets:
-- `BuddyNotchShared` — Shared models (Session, HookEvent, Constants)
-- `BuddyNotch` — Main app (AppKit NSPanel + SwiftUI views + Core scanners)
-- `BuddyBridge` — CLI hook binary called by Claude Code (fire-and-forget)
+Monorepo with pnpm workspaces:
 
-Key directories:
-- `Sources/BuddyNotch/UI/` — All SwiftUI views (CompactView, OverviewView, etc.)
-- `Sources/BuddyNotch/Core/` — Backend (ProcessScanner, ContextScanner, SocketServer, TerminalJumper, GhosttyTabMapper)
-- `Sources/BuddyNotch/App/` — AppDelegate + main.swift entry point
+```
+buddynotch/
+  apps/
+    desktop/            # Tauri Rust core (window, keyboard, notch detection)
+      src/              # lib.rs, commands.rs, window.rs, notch.rs, keyboard.rs, sidecar.rs, tray.rs
+      tauri.conf.json
+      Cargo.toml
+    web/                # React + TypeScript + Tailwind frontend
+      src/
+        components/     # notch-content, compact-view, overview-view, session-card, etc.
+        context/        # session-context.tsx (useReducer), types.ts
+        hooks/          # use-tauri-events.ts, use-sound.ts
+        lib/            # colors.ts
+      index.html
+      vite.config.ts
+      tsconfig.json
+      package.json
+  packages/
+    sidecar/            # Node.js sidecar (process scanning, session mgmt, socket server)
+      src/              # index.ts, process-scanner.ts, context-scanner.ts, session-manager.ts, etc.
+      package.json
+    bridge/             # Rust CLI binary (Claude Code hook handler)
+      src/              # main.rs, hook_input.rs
+      Cargo.toml
+  Cargo.toml            # Rust workspace (apps/desktop + packages/bridge)
+  pnpm-workspace.yaml   # pnpm workspaces (apps/*, packages/*)
+  package.json          # Root scripts (pnpm dev/build/format)
+```
 
 ## Architecture Decisions
 
-**DO use `DispatchQueue.main.async` for cross-thread dispatch** — Not `Task { @MainActor in }` which causes crashes with NSHostingView layout.
+**DO use LogicalPosition/LogicalSize for Tauri window positioning** — Retina 2x displays halve PhysicalPosition values.
 
-**DO NOT use `@MainActor` on classes** — Causes issues with Timer callbacks, NSEvent monitors, and DispatchSource handlers in Swift 5 mode. Everything runs on main thread anyway.
+**DO use NSAnimationContext for panel transitions** — `window.animator().setFrame()` with 0.2s ease-out in `window.rs`. Don't use Tauri's `set_position`/`set_size` for state transitions (no animation).
 
-**DO NOT update `lastActivity` in ProcessScanner** — Only hooks and initial session creation should set it. Updating it every scan cycle causes the session list to constantly reorder.
+**DO swizzle `acceptsFirstMouse:` on the webview** — Tauri's NSWindow requires focus before passing clicks. Swizzling the content view hierarchy to return YES makes it single-click like the original NSPanel. See `window.rs::swizzle_accepts_first_mouse`.
 
-**DO copy `tty`/`processPid`/`cpuPercent` during dedup** — When a hook-created session and a process-created session are merged, the surviving session MUST have the process info (tty, pid, cpu) or tab jumping won't work.
+**DO NOT use `setFloatingPanel` on Tauri windows** — Tauri's NSWindow doesn't respond to NSPanel methods. Use `msg_send!` for `setLevel`, `setCollectionBehavior`, `setHidesOnDeactivate` only.
 
-**DO use CGEvent for Ghostty navigation** — `Cmd+N` (goto_tab) and `Cmd+]` (goto_split:next) via `CGEvent.post()`. AppleScript `click radio button` is too slow and causes visual flicker.
+**DO NOT update `lastActivity` in ProcessScanner** — Only hooks and initial session creation should set it.
 
-**DO NOT iterate Ghostty tabs in background** — GhosttyTabMapper probes pane counts by briefly clicking through tabs. Only do this on-demand (when user clicks a session row), never in the periodic scan.
+**DO copy `tty`/`processPid`/`cpuPercent` during dedup** — Surviving session MUST have process info or tab jumping won't work.
+
+**DO use CGEvent for Ghostty navigation** — `Cmd+N` (goto_tab) and `Cmd+]` (goto_split:next) via CGEvent. AppleScript is too slow.
+
+**DO NOT iterate Ghostty tabs in background** — Only probe on-demand (user clicks a session row).
+
+**DO make sidecar spawning non-fatal** — If npx/tsx isn't found, the app still renders without session data.
+
+**DO use `pnpm dev` for development** — Runs `tauri dev` from root which starts Vite dev server + Rust build. The raw debug binary doesn't properly serve the embedded frontend.
+
+## Tailwind CSS v4
+
+- Plugin: `@tailwindcss/vite` in `apps/web/vite.config.ts`
+- CSS entry: `apps/web/src/index.css` with `@import "tailwindcss"` + `@theme` block
+- Custom tokens: `--color-buddy-green`, `--color-surface`, `--color-text-dim`, etc.
+- Do NOT add `* { margin: 0; padding: 0; }` outside Tailwind layers — it overrides utility classes. Tailwind's preflight handles the reset.
+
+## IPC Protocol
+
+Tauri <-> Sidecar via stdin/stdout NDJSON:
+
+```
+Tauri -> Sidecar:  {"id":1, "method":"jumpToSession", "params":{"sessionId":"proc-123"}}
+Sidecar -> Tauri:  {"event":"sessionsUpdated", "data":{"sessions":{...}, "heroId":"proc-123"}}
+Sidecar -> Tauri:  {"event":"tauriCommand", "data":{"method":"activate_app", "params":{...}}}
+```
+
+`tauriCommand` events are handled in Rust (keyboard injection, app activation) — not forwarded to the frontend.
 
 ## Claude Code Hooks
 
-Hooks use the new `matcher` + `hooks` array format in `~/.claude/settings.json`:
+Auto-installed to `~/.claude/settings.json` on startup via `packages/sidecar/src/hook-installer.ts`:
 
 ```json
-{"matcher": "", "hooks": [{"type": "command", "command": "/path/to/BuddyBridge pre-tool"}]}
+{"matcher": "", "hooks": [{"type": "command", "command": "/path/to/buddy-bridge pre-tool"}]}
 ```
 
-Empty `matcher` = matches all tools. BuddyBridge reads hook JSON from stdin, sends NDJSON to `~/.buddy-notch/buddy.sock`, and exits immediately (exit code 0 = allow).
+Bridge binary reads hook JSON from stdin, sends NDJSON to `~/.buddy-notch/buddy.sock`, exits 0.
 
 ## Context Token Estimation
 
-Reading exact tokens requires `claude --print "/context" --resume <id>` which is slow (~1s) and spawns a subprocess. The fast path estimates from the API usage fields in the JSONL:
-
-- Under max context: `raw_total * 0.85`
-- Over max (autocompacted): `max_context * (1/over_ratio + 0.08)`
-
-Exact query runs every 60s and overrides the estimate.
-
-## Ghostty Tab Jumping
-
-The hardest part of the codebase. Key files: `GhosttyTabMapper.swift`, `TerminalJumper.swift`.
-
-Process: find claude PID -> get TTY -> walk process tree to Ghostty child -> probe tab pane counts -> map to (tab, pane) -> send `Cmd+tab_number` then `Cmd+]` keystrokes.
-
-The probe caches results and only re-probes when tab or child count changes.
-
-## Session Detection
-
-Three layers, all feeding into `SessionManager.sessions`:
-1. `ProcessScanner` (2s) — `pgrep claude`, gets PID/TTY/CWD/CPU
-2. `BuddyBridge` hooks — tool use events via Unix socket
-3. `ContextScanner` (3s) — reads `~/.claude/sessions/*.json` + JSONL for model/branch/tokens
-
-Sessions are deduped by working directory. Hero session = highest CPU (actively working).
+Fast path (3s): `raw_total * 0.85` or `max_context * (1/over_ratio + 0.08)` for autocompacted.
+Exact query (60s): `claude --print "/context" --resume <id>`.
 
 ## Runtime Files
 
-- `~/.buddy-notch/buddy.sock` — Unix domain socket for BuddyBridge -> BuddyNotch IPC
-- `~/.buddy-notch/buddy.pid` — PID file for the running BuddyNotch instance
-- `~/.claude/settings.json` — Claude Code settings with hook entries
-- `~/.claude/sessions/*.json` — Session metadata (PID, sessionId, cwd)
-- `~/.claude/projects/<project-key>/<sessionId>.jsonl` — Conversation data
-
-## Known Issues
-
-- Panel can get stuck expanded if state changes race with animation (50ms timer catches most cases)
-- Context estimation can be 10-20% off between exact queries
-- Ghostty tab probe briefly flickers through tabs on first click
-- `claude --print "/context"` spawns visible processes that ProcessScanner must filter out
-- Session list sorted alphabetically by path — not by recency or importance
+- `~/.buddy-notch/buddy.sock` — Unix domain socket (sidecar <-> bridge)
+- `~/.buddy-notch/buddy.pid` — PID file
+- `~/.claude/settings.json` — Claude Code hooks
+- `~/.claude/sessions/*.json` — Session metadata
+- `~/.claude/projects/<key>/<sessionId>.jsonl` — Conversation data
 
 ## Testing
 
-No automated tests. Manual testing:
-
 ```bash
-# Send a fake hook event to test the socket
-echo '{"session_id":"test","tool_name":"Edit","tool_input":{"file_path":"test.ts"},"hookEventName":"PreToolUse","cwd":"/tmp"}' | .build/debug/BuddyBridge pre-tool
+# Send a fake hook event
+echo '{"session_id":"test","tool_name":"Edit","tool_input":{"file_path":"test.ts"},"hookEventName":"PreToolUse","cwd":"/tmp"}' | ./target/debug/buddy-bridge pre-tool
 
-# Test socket directly
-echo '{"type":"sessionStart","sessionId":"test","timestamp":"2026-04-02T12:00:00Z","payload":{"sessionStart":{"workingDirectory":"/tmp"}}}' | socat - UNIX-CONNECT:~/.buddy-notch/buddy.sock
+# Test socket directly (requires app running)
+node -e "
+const net = require('net');
+const sock = net.createConnection(process.env.HOME + '/.buddy-notch/buddy.sock', () => {
+  sock.write(JSON.stringify({type:'sessionStart',sessionId:'test',timestamp:new Date().toISOString(),payload:{sessionStart:{workingDirectory:'/tmp'}}}) + '\n');
+  setTimeout(() => sock.end(), 200);
+});
+"
 ```

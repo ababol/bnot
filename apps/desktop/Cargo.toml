@@ -1,0 +1,29 @@
+[package]
+name = "buddynotch"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-shell = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", features = [
+    "NSScreen",
+    "NSApplication",
+    "NSRunningApplication",
+    "NSWorkspace",
+    "NSGraphics",
+] }
+core-graphics = "0.24"
+core-graphics-types = "0.2"
+
+[lib]
+name = "buddynotch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]

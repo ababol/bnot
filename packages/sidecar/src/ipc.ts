@@ -1,0 +1,35 @@
+import * as readline from "readline";
+import type { IpcEvent, IpcRequest, IpcResponse } from "./types.js";
+
+type RequestHandler = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+
+let handler: RequestHandler | null = null;
+
+const rl = readline.createInterface({ input: process.stdin });
+
+rl.on("line", async (line) => {
+  if (!handler) return;
+  try {
+    const req: IpcRequest = JSON.parse(line);
+    try {
+      const result = await handler(req.method, req.params);
+      send({ id: req.id, result } as IpcResponse);
+    } catch (err) {
+      send({ id: req.id, error: String(err) } as IpcResponse);
+    }
+  } catch {
+    // Invalid JSON — ignore
+  }
+});
+
+export function onRequest(h: RequestHandler) {
+  handler = h;
+}
+
+export function emit(event: string, data: unknown) {
+  send({ event, data } as IpcEvent);
+}
+
+function send(msg: IpcResponse | IpcEvent) {
+  process.stdout.write(JSON.stringify(msg) + "\n");
+}

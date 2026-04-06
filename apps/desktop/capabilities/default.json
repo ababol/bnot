@@ -1,0 +1,13 @@
+{
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-spawn",
+    "shell:allow-stdin-write",
+    "shell:allow-kill",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister"
+  ]
+}
