@@ -21,6 +21,12 @@ pub fn set_panel_state<R: Runtime>(app: AppHandle<R>, state: String) -> Result<(
     window::animate_frame(&win, x, y, w, h);
     window::show_without_activation(&win);
 
+    // Make the window key when expanding so that clicking outside triggers
+    // a blur event, allowing the frontend to collapse back to compact.
+    if state != "compact" {
+        window::make_key_window(&win);
+    }
+
     Ok(())
 }
 

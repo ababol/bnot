@@ -82,6 +82,28 @@ pub fn animate_frame<R: Runtime>(window: &WebviewWindow<R>, x: f64, y: f64, w: f
     }
 }
 
+/// Make the window key so it can receive/lose focus events.
+/// Called when the panel expands so that clicking outside triggers a blur event,
+/// which the frontend uses to collapse back to compact.
+pub fn make_key_window<R: Runtime>(window: &WebviewWindow<R>) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::rc::Retained;
+        use objc2::runtime::AnyObject;
+
+        let raw = match window.ns_window() {
+            Ok(ptr) => ptr as *mut AnyObject,
+            Err(_) => return,
+        };
+        let Some(ns_window) = (unsafe { Retained::retain(raw) }) else {
+            return;
+        };
+        unsafe {
+            let _: () = objc2::msg_send![&ns_window, makeKeyWindow];
+        }
+    }
+}
+
 /// Show the window without activating the application or making it key.
 /// Use instead of `win.show()` (which calls `makeKeyAndOrderFront:`) so that
 /// BuddyNotch never steals focus — critical when launched from Finder where
@@ -147,37 +169,6 @@ pub fn configure_macos_window<R: Runtime>(window: &WebviewWindow<R>) {
 
             // Don't hide when app deactivates
             let _: () = objc2::msg_send![&ns_window, setHidesOnDeactivate: false];
-
-            // Prevent this window from ever becoming key or main.
-            // When canBecomeKeyWindow returns NO, macOS never routes clicks through
-            // the "activate app" path — they are delivered directly every time.
-            // This is the panel-like behavior we need without using NSPanel.
-            let window_cls: *const AnyClass = objc2::msg_send![&ns_window, class];
-            if !window_cls.is_null() {
-                extern "C" fn no_bool(
-                    _this: &objc2::runtime::AnyObject,
-                    _sel: objc2::runtime::Sel,
-                ) -> Bool {
-                    Bool::NO
-                }
-                for sel_name in [c"canBecomeKeyWindow", c"canBecomeMainWindow"] {
-                    let sel = Sel::register(sel_name);
-                    let added = class_addMethod(
-                        window_cls as *mut _,
-                        sel,
-                        no_bool as *const std::ffi::c_void,
-                        "B@:\0".as_ptr() as *const i8,
-                    );
-                    if !added {
-                        class_replaceMethod(
-                            window_cls as *mut _,
-                            sel,
-                            no_bool as *const std::ffi::c_void,
-                            "B@:\0".as_ptr() as *const i8,
-                        );
-                    }
-                }
-            }
 
             // Make clicks pass through without requiring focus first.
             // Swizzle acceptsFirstMouse: on the window's content view to return YES.
