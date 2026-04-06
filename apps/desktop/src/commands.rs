@@ -19,7 +19,7 @@ pub fn set_panel_state<R: Runtime>(app: AppHandle<R>, state: String) -> Result<(
 
     // Use animated transition instead of instant set_position/set_size
     window::animate_frame(&win, x, y, w, h);
-    let _ = win.show();
+    window::show_without_activation(&win);
 
     Ok(())
 }

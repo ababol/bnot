@@ -195,18 +195,43 @@ fn find_executable(name: &str) -> Option<String> {
         }
     }
 
-    // Common Node.js locations on macOS
-    let common_paths = [
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    // Common fixed locations
+    let fixed = [
         format!("/usr/local/bin/{name}"),
         format!("/opt/homebrew/bin/{name}"),
-        format!(
-            "{}/.nvm/versions/node/current/bin/{name}",
-            std::env::var("HOME").unwrap_or_default()
-        ),
+        format!("/opt/homebrew/opt/node/bin/{name}"),
+        format!("{home}/.volta/bin/{name}"),
+        format!("{home}/.nvm/versions/node/current/bin/{name}"),
     ];
-    for p in &common_paths {
+    for p in &fixed {
         if std::path::Path::new(p).exists() {
             return Some(p.clone());
+        }
+    }
+
+    // NVM: scan all version directories, pick the newest by numeric version.
+    // String sort is wrong here: "v8" > "v24" lexicographically.
+    let nvm_dir = format!("{home}/.nvm/versions/node");
+    if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+        let mut versions: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+        let parse_ver = |name: std::ffi::OsString| -> (u32, u32, u32) {
+            let s = name.to_string_lossy().into_owned();
+            let s = s.trim_start_matches('v').to_string();
+            let parts: Vec<u32> = s.split('.').filter_map(|p| p.parse().ok()).collect();
+            (
+                parts.first().copied().unwrap_or(0),
+                parts.get(1).copied().unwrap_or(0),
+                parts.get(2).copied().unwrap_or(0),
+            )
+        };
+        versions.sort_by(|a, b| parse_ver(b.file_name()).cmp(&parse_ver(a.file_name())));
+        for entry in versions {
+            let candidate = entry.path().join("bin").join(name);
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().into_owned());
+            }
         }
     }
 

@@ -42,7 +42,7 @@ pub fn run() {
                 let _ = win.set_size(tauri::LogicalSize::new(300.0, 32.0));
             }
 
-            let _ = win.show();
+            window::show_without_activation(&win);
 
             // System tray
             tray::setup_tray(&app.handle().clone());

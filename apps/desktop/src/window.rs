@@ -82,6 +82,33 @@ pub fn animate_frame<R: Runtime>(window: &WebviewWindow<R>, x: f64, y: f64, w: f
     }
 }
 
+/// Show the window without activating the application or making it key.
+/// Use instead of `win.show()` (which calls `makeKeyAndOrderFront:`) so that
+/// BuddyNotch never steals focus — critical when launched from Finder where
+/// the app briefly becomes frontmost before the Accessory policy takes effect.
+pub fn show_without_activation<R: Runtime>(window: &WebviewWindow<R>) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::rc::Retained;
+        use objc2::runtime::AnyObject;
+
+        let raw = match window.ns_window() {
+            Ok(ptr) => ptr as *mut AnyObject,
+            Err(_) => return,
+        };
+        let Some(ns_window) = (unsafe { Retained::retain(raw) }) else {
+            return;
+        };
+        unsafe {
+            let _: () = objc2::msg_send![&ns_window, orderFrontRegardless];
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window.show();
+    }
+}
+
 /// Apply macOS-specific window properties that Tauri config cannot express.
 pub fn configure_macos_window<R: Runtime>(window: &WebviewWindow<R>) {
     #[cfg(target_os = "macos")]
@@ -121,6 +148,37 @@ pub fn configure_macos_window<R: Runtime>(window: &WebviewWindow<R>) {
             // Don't hide when app deactivates
             let _: () = objc2::msg_send![&ns_window, setHidesOnDeactivate: false];
 
+            // Prevent this window from ever becoming key or main.
+            // When canBecomeKeyWindow returns NO, macOS never routes clicks through
+            // the "activate app" path — they are delivered directly every time.
+            // This is the panel-like behavior we need without using NSPanel.
+            let window_cls: *const AnyClass = objc2::msg_send![&ns_window, class];
+            if !window_cls.is_null() {
+                extern "C" fn no_bool(
+                    _this: &objc2::runtime::AnyObject,
+                    _sel: objc2::runtime::Sel,
+                ) -> Bool {
+                    Bool::NO
+                }
+                for sel_name in [c"canBecomeKeyWindow", c"canBecomeMainWindow"] {
+                    let sel = Sel::register(sel_name);
+                    let added = class_addMethod(
+                        window_cls as *mut _,
+                        sel,
+                        no_bool as *const std::ffi::c_void,
+                        "B@:\0".as_ptr() as *const i8,
+                    );
+                    if !added {
+                        class_replaceMethod(
+                            window_cls as *mut _,
+                            sel,
+                            no_bool as *const std::ffi::c_void,
+                            "B@:\0".as_ptr() as *const i8,
+                        );
+                    }
+                }
+            }
+
             // Make clicks pass through without requiring focus first.
             // Swizzle acceptsFirstMouse: on the window's content view to return YES.
             swizzle_accepts_first_mouse(&ns_window);
@@ -133,61 +191,19 @@ pub fn configure_macos_window<R: Runtime>(window: &WebviewWindow<R>) {
     }
 }
 
-/// Swizzle `acceptsFirstMouse:` on the window's content view hierarchy
-/// so clicks go through immediately without needing to focus the window first.
+/// Swizzle `acceptsFirstMouse:` on WKWebView and its internal view classes so that
+/// clicks register immediately without requiring the window to be focused first.
+/// Targets classes by name rather than walking the live view hierarchy, so it works
+/// regardless of when the WKWebView finishes loading (fixes production .app builds).
 #[cfg(target_os = "macos")]
 unsafe fn swizzle_accepts_first_mouse(ns_window: &objc2::rc::Retained<objc2::runtime::AnyObject>) {
-    use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, Sel};
-    use std::sync::Once;
-
-    // Get the content view
-    let content_view: *mut AnyObject = objc2::msg_send![&**ns_window, contentView];
-    if content_view.is_null() {
-        return;
-    }
-
-    // Walk the view hierarchy to find the WKWebView (or its subview that handles events)
-    // We'll swizzle on the content view's class and all subviews
-    swizzle_view_class(content_view);
-
-    // Also swizzle all subviews recursively
-    let subviews: *mut AnyObject = objc2::msg_send![content_view, subviews];
-    if !subviews.is_null() {
-        let count: usize = objc2::msg_send![subviews, count];
-        for i in 0..count {
-            let subview: *mut AnyObject = objc2::msg_send![subviews, objectAtIndex: i];
-            if !subview.is_null() {
-                swizzle_view_class(subview);
-                // Go one more level deep for WKWebView's internal views
-                let inner_subviews: *mut AnyObject = objc2::msg_send![subview, subviews];
-                if !inner_subviews.is_null() {
-                    let inner_count: usize = objc2::msg_send![inner_subviews, count];
-                    for j in 0..inner_count {
-                        let inner: *mut AnyObject =
-                            objc2::msg_send![inner_subviews, objectAtIndex: j];
-                        if !inner.is_null() {
-                            swizzle_view_class(inner);
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Add/replace `acceptsFirstMouse:` on a view's class to return YES
-#[cfg(target_os = "macos")]
-unsafe fn swizzle_view_class(view: *mut objc2::runtime::AnyObject) {
     use objc2::runtime::{AnyClass, Bool, Sel};
 
-    let cls: *const AnyClass = objc2::msg_send![view, class];
-    if cls.is_null() {
-        return;
-    }
+    // Explicitly disable mouse-event pass-through on the window itself.
+    let _: () = objc2::msg_send![&**ns_window, setIgnoresMouseEvents: false];
 
     let sel = Sel::register(c"acceptsFirstMouse:");
 
-    // Define the replacement function
     extern "C" fn yes_accepts_first_mouse(
         _this: &objc2::runtime::AnyObject,
         _sel: Sel,
@@ -196,22 +212,33 @@ unsafe fn swizzle_view_class(view: *mut objc2::runtime::AnyObject) {
         Bool::YES
     }
 
-    // Add or replace the method on this class
-    let _ = objc2::runtime::AnyClass::get(c"NSObject"); // ensure runtime is initialized
-    let added = class_addMethod(
-        cls as *mut _,
-        sel,
-        yes_accepts_first_mouse as *const std::ffi::c_void,
-        "B@:@\0".as_ptr() as *const i8,
-    );
-    if !added {
-        // Method already exists, replace it
-        class_replaceMethod(
-            cls as *mut _,
-            sel,
-            yes_accepts_first_mouse as *const std::ffi::c_void,
-            "B@:@\0".as_ptr() as *const i8,
-        );
+    // Target WKWebView and its internal event-handling views by class name.
+    // This approach works even before the webview has loaded its content, so it
+    // is safe to call at setup time in both dev and production builds.
+    let class_names: &[&std::ffi::CStr] = &[
+        c"WKWebView",
+        c"WKScrollView",
+        c"WKContentView",
+        c"WKFlippedView",
+    ];
+
+    for class_name in class_names {
+        if let Some(cls) = AnyClass::get(class_name) {
+            let added = class_addMethod(
+                cls as *const _ as *mut _,
+                sel,
+                yes_accepts_first_mouse as *const std::ffi::c_void,
+                "B@:@\0".as_ptr() as *const i8,
+            );
+            if !added {
+                class_replaceMethod(
+                    cls as *const _ as *mut _,
+                    sel,
+                    yes_accepts_first_mouse as *const std::ffi::c_void,
+                    "B@:@\0".as_ptr() as *const i8,
+                );
+            }
+        }
     }
 }
 

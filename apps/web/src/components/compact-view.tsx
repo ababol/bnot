@@ -33,7 +33,6 @@ export default function CompactView({ notchWidth }: Props) {
     : "gray";
 
   const handleClick = () => {
-    if (sessionCount === 0) return;
     dispatch({ type: "SET_PANEL_STATE", panelState: "overview" });
     invoke("set_panel_state", { state: "overview" });
   };
@@ -41,7 +40,7 @@ export default function CompactView({ notchWidth }: Props) {
   return (
     <div
       onClick={handleClick}
-      className={`flex h-full w-full items-center rounded-b-[10px] bg-black/85 ${sessionCount > 0 ? "cursor-pointer" : "cursor-default"}`}
+      className="flex h-full w-full cursor-pointer items-center rounded-b-[10px] bg-black"
     >
       {/* Left wing */}
       <div className="flex flex-1 items-center justify-start pl-2">
