@@ -7,7 +7,7 @@
     "frontendDist": "../web/dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "pnpm --filter web dev",
-    "beforeBuildCommand": "pnpm --filter web build"
+    "beforeBuildCommand": "pnpm --filter web build && pnpm --filter buddynotch-sidecar build && cargo build -p buddy-bridge --release"
   },
   "app": {
     "macOSPrivateApi": true,
@@ -35,6 +35,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../../packages/sidecar/dist/index.mjs": "sidecar/index.mjs",
+      "../../target/release/buddy-bridge": "bin/buddy-bridge"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

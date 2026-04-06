@@ -54,12 +54,21 @@ impl SidecarManager {
         stdin_arc: &Arc<Mutex<Option<ChildStdin>>>,
         app: &AppHandle<R>,
     ) -> Result<(), String> {
-        // Try to find npx/tsx in common locations
-        let npx = find_executable("npx").ok_or("npx not found in PATH")?;
+        // Check if we have a bundled sidecar (release) or source (dev)
+        let bundled_mjs = dir.join("index.mjs");
+        let (cmd, args, work_dir): (String, Vec<String>, PathBuf) = if bundled_mjs.exists() {
+            // Bundled: run with node
+            let node = find_executable("node").ok_or("node not found in PATH")?;
+            (node, vec!["index.mjs".to_string()], dir.clone())
+        } else {
+            // Dev: run with npx tsx
+            let npx = find_executable("npx").ok_or("npx not found in PATH")?;
+            (npx, vec!["tsx".to_string(), "src/index.ts".to_string()], dir.clone())
+        };
 
-        let mut proc = Command::new(&npx)
-            .args(["tsx", "src/index.ts"])
-            .current_dir(dir)
+        let mut proc = Command::new(&cmd)
+            .args(&args)
+            .current_dir(&work_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -141,6 +150,18 @@ fn handle_tauri_command(data: &serde_json::Value) {
 
 /// Find the sidecar directory by checking multiple locations
 fn find_sidecar_dir() -> Option<PathBuf> {
+    // Check inside app bundle Resources first (release builds)
+    if let Ok(exe) = std::env::current_exe() {
+        let resources = exe
+            .parent()? // MacOS/
+            .parent()? // Contents/
+            .join("Resources/sidecar");
+        if resources.join("index.mjs").exists() {
+            return Some(resources);
+        }
+    }
+
+    // Dev mode: check relative to cwd
     let cwd = std::env::current_dir().ok()?;
     let candidates = [
         cwd.join("packages/sidecar"),            // from project root

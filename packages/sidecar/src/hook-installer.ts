@@ -59,6 +59,8 @@ export async function installHooksIfNeeded(bridgePath?: string) {
 async function findBridgePath(): Promise<string> {
   const cwd = process.cwd();
   const candidates = [
+    // Bundled inside .app Resources
+    path.resolve(cwd, "../Resources/bin/buddy-bridge"),
     path.join(os.homedir(), ".local/bin/buddy-bridge"),
     "/usr/local/bin/buddy-bridge",
     path.resolve(cwd, "target/debug/buddy-bridge"),
