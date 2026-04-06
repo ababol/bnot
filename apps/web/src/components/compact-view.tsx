@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSession } from "../context/session-context";
 import { contextPercent } from "../context/types";
-import { buddyColorFromSessions } from "../lib/colors";
-import BuddyBattery from "./buddy-battery";
+import type { BuddyColor } from "../lib/colors";
+import { buddyColorFromSessions, buddyTraitsFromId } from "../lib/colors";
+import { MAIN_COLORS } from "../lib/colors";
+import PixelBuddy from "./pixel-buddy";
 
 interface Props {
   notchWidth: number;
@@ -20,7 +22,20 @@ export default function CompactView({ notchWidth }: Props) {
   );
 
   const notchGap = notchWidth + 16;
-  const buddyColor = buddyColorFromSessions(sessions);
+  const heroPct = heroSession ? contextPercent(heroSession) : 0;
+  const barColor: BuddyColor = heroPct > 0.85 ? "red" : heroPct > 0.6 ? "orange" : "green";
+  const heroSuffix = heroSession ? (heroSession.gitWorktree ?? heroSession.gitBranch ?? "") : "";
+  const heroTraits = heroSession
+    ? buddyTraitsFromId(heroSession.workingDirectory + heroSuffix)
+    : undefined;
+  const heroIsWorking = heroSession ? heroSession.status === "active" && heroSession.cpuPercent >= 2.0 : false;
+  const heroColor: BuddyColor = heroSession
+    ? heroSession.status === "waitingApproval" ? "orange"
+      : heroSession.status === "waitingAnswer" ? "cyan"
+      : heroSession.status === "error" ? "red"
+      : heroIsWorking ? (heroTraits?.color ?? "green")
+      : "gray"
+    : "gray";
 
   const handleClick = () => {
     if (sessionCount === 0) return;
@@ -38,11 +53,20 @@ export default function CompactView({ notchWidth }: Props) {
         {isJump ? (
           <span className="text-base text-buddy-green">&#x2713;</span>
         ) : (
-          <BuddyBattery
-            color={buddyColor}
-            percent={heroSession ? contextPercent(heroSession) : 0}
-            isActive={hasWorkingSessions}
-          />
+          <div className="flex items-center gap-1">
+            <PixelBuddy color={heroColor} isActive={heroIsWorking} traits={heroTraits} />
+            {heroSession && (
+              <div className="relative h-[14px] w-[4px] overflow-hidden rounded-sm bg-white/10">
+                <div
+                  className="absolute bottom-0 w-full rounded-sm"
+                  style={{
+                    height: `${Math.max(Math.min(heroPct, 1) * 100, 10)}%`,
+                    backgroundColor: MAIN_COLORS[barColor],
+                  }}
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
 

@@ -17,3 +17,6 @@ apps/desktop/gen/
 
 # Sidecar
 packages/sidecar/dist/
+
+# LLMs
+.claude/.worktrees/

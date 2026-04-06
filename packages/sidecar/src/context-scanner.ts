@@ -26,9 +26,12 @@ export class ContextScanner {
   }
 
   start() {
-    this.scan();
+    // Delay initial scan to let ProcessScanner populate sessions first
+    setTimeout(() => {
+      this.scan();
+      this.fetchExactContexts();
+    }, 3000);
     this.timer = setInterval(() => this.scan(), 3000);
-    this.fetchExactContexts();
     this.exactTimer = setInterval(() => this.fetchExactContexts(), 60000);
   }
 
@@ -61,7 +64,7 @@ export class ContextScanner {
           continue;
         }
 
-        const projectKey = cwd.replace(/\//g, "-");
+        const projectKey = cwd.replace(/[/.]/g, "-");
         const jsonlPath = path.join(CLAUDE_DIR, "projects", projectKey, `${sessionId}.jsonl`);
         try {
           await fs.access(jsonlPath);

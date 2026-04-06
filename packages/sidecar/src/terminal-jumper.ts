@@ -8,7 +8,6 @@ const exec = promisify(execFile);
 
 export async function jumpToSession(session: AgentSession) {
   const terminal = (session.terminalApp ?? (await detectRunningTerminal())).toLowerCase();
-
   if (terminal.includes("ghostty")) {
     await jumpToGhostty(session);
   } else if (terminal.includes("iterm")) {
@@ -21,10 +20,14 @@ export async function jumpToSession(session: AgentSession) {
 }
 
 async function jumpToGhostty(session: AgentSession) {
-  // Use Ghostty's native AppleScript API to focus the terminal by working directory.
-  // This handles tabs, splits, and pane focus in one call.
-  const focused = await focusGhosttyTerminal(session.workingDirectory);
-
+  // Use Ghostty's native AppleScript API to focus the terminal.
+  // Pass TTY for precise matching when multiple terminals share the same directory.
+  const focused = await focusGhosttyTerminal(
+    session.workingDirectory,
+    session.tty,
+    session.gitBranch ?? undefined,
+    session.gitWorktree ?? undefined,
+  );
   if (!focused) {
     // Fallback: just activate Ghostty
     emit("tauriCommand", { method: "activate_app", params: { bundleId: "com.mitchellh.ghostty" } });

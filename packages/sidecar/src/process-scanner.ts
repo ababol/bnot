@@ -11,8 +11,10 @@ interface ProcessInfo {
   terminal: string | null;
   tty: string | null;
   cpuPercent: number;
+  startedAt: number;
   gitBranch: string | null;
   gitWorktree: string | null;
+  gitRepoName: string | null;
 }
 
 export class ProcessScanner {
@@ -45,7 +47,7 @@ export class ProcessScanner {
           terminalPid: info.parentPid,
           terminalApp: info.terminal ?? undefined,
           status: "active",
-          startedAt: Date.now(),
+          startedAt: info.startedAt,
           lastActivity: Date.now(),
           contextTokens: 0,
           maxContextTokens: 0,
@@ -54,16 +56,26 @@ export class ProcessScanner {
           processPid: info.pid,
           gitBranch: info.gitBranch ?? undefined,
           gitWorktree: info.gitWorktree ?? undefined,
+          gitRepoName: info.gitRepoName ?? undefined,
         };
         if (!this.sm.heroSessionId) this.sm.heroSessionId = sessionId;
       }
       // Update live fields (not lastActivity)
+      // Detect idle→working transition to track current task duration
+      const wasIdle = this.sm.sessions[sessionId].cpuPercent < 2.0;
+      const isWorking = info.cpuPercent >= 2.0;
+      if (wasIdle && isWorking) {
+        this.sm.sessions[sessionId].taskStartedAt = Date.now();
+      } else if (!isWorking) {
+        this.sm.sessions[sessionId].taskStartedAt = undefined;
+      }
       this.sm.sessions[sessionId].status = "active";
       this.sm.sessions[sessionId].tty = info.tty ?? undefined;
       this.sm.sessions[sessionId].processPid = info.pid;
       this.sm.sessions[sessionId].cpuPercent = info.cpuPercent;
       this.sm.sessions[sessionId].gitBranch = info.gitBranch ?? undefined;
       this.sm.sessions[sessionId].gitWorktree = info.gitWorktree ?? undefined;
+      this.sm.sessions[sessionId].gitRepoName = info.gitRepoName ?? undefined;
     }
 
     const activePidSet = new Set(activePids.map((p) => `proc-${p.pid}`));
@@ -189,21 +201,33 @@ export class ProcessScanner {
       if (cmdLine.includes("--print") || cmdLine.includes("--output-format")) continue;
       if (cmdLine.includes("--resume") && cmdLine.includes("--no-session")) continue;
 
-      const [parentPid, cwd, tty, cpu] = await Promise.all([
+      const [parentPid, cwd, tty, cpu, startedAt] = await Promise.all([
         this.getParentPid(pid),
         this.getCwd(pid),
         this.getTty(pid),
         this.getCpu(pid),
+        this.getStartTime(pid),
       ]);
 
       if (!cwd || cwd === "/") continue;
 
-      const [terminal, gitBranch, gitWorktree] = await Promise.all([
+      const [terminal, gitBranch, worktreeInfo] = await Promise.all([
         this.getTerminal(parentPid),
         this.getGitBranch(cwd),
         this.getGitWorktree(cwd),
       ]);
-      results.push({ pid, parentPid, cwd, terminal, tty, cpuPercent: cpu, gitBranch, gitWorktree });
+      results.push({
+        pid,
+        parentPid,
+        cwd,
+        terminal,
+        tty,
+        cpuPercent: cpu,
+        startedAt,
+        gitBranch,
+        gitWorktree: worktreeInfo?.worktree ?? null,
+        gitRepoName: worktreeInfo?.repoName ?? null,
+      });
     }
 
     return results;
@@ -256,6 +280,17 @@ export class ProcessScanner {
     }
   }
 
+  private async getStartTime(pid: number): Promise<number> {
+    try {
+      // lstart gives the exact start time, e.g. "Mon Apr  6 22:50:00 2026"
+      const { stdout } = await exec("/bin/ps", ["-o", "lstart=", "-p", String(pid)]);
+      const t = new Date(stdout.trim()).getTime();
+      return isNaN(t) ? Date.now() : t;
+    } catch {
+      return Date.now();
+    }
+  }
+
   private async getGitBranch(cwd: string): Promise<string | null> {
     try {
       const { stdout } = await exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"]);
@@ -266,15 +301,20 @@ export class ProcessScanner {
     }
   }
 
-  private async getGitWorktree(cwd: string): Promise<string | null> {
+  private async getGitWorktree(
+    cwd: string,
+  ): Promise<{ worktree: string; repoName: string } | null> {
     try {
       const [gitDir, commonDir] = await Promise.all([
         exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-dir"]).then((r) => r.stdout.trim()),
         exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-common-dir"]).then((r) => r.stdout.trim()),
       ]);
-      // If they differ, this is a worktree — name is the cwd basename
+      // If they differ, this is a worktree
       if (gitDir !== commonDir) {
-        return cwd.split("/").pop() ?? null;
+        const worktree = cwd.split("/").pop() ?? cwd;
+        // commonDir is like /path/to/repo/.git — repo name is parent dir
+        const repoName = commonDir.replace(/\/\.git$/, "").split("/").pop() ?? worktree;
+        return { worktree, repoName };
       }
     } catch {
       // not a git repo

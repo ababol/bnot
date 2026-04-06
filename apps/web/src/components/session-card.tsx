@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
 import type { AgentSession, SessionStatus } from "../context/types";
 import { contextPercent } from "../context/types";
 import type { BuddyColor } from "../lib/colors";
+import { buddyTraitsFromId } from "../lib/colors";
+import PixelBuddy from "./pixel-buddy";
 import PixelProgressBar from "./pixel-progress-bar";
 
 interface Props {
@@ -12,8 +15,8 @@ interface Props {
 const STATUS_COLORS: Record<SessionStatus, string> = {
   active: "bg-buddy-green",
   waitingApproval: "bg-buddy-orange",
-  waitingAnswer: "bg-buddy-cyan",
-  completed: "bg-buddy-blue",
+  waitingAnswer: "bg-buddy-orange",
+  completed: "bg-buddy-green",
   error: "bg-buddy-red",
 };
 
@@ -41,13 +44,34 @@ const STATUS_TEXT: Record<SessionStatus, string> = {
   error: "Error",
 };
 
-function formatDuration(startedAt: number): string {
-  const elapsed = (Date.now() - startedAt) / 1000;
-  if (elapsed < 60) return `${Math.floor(elapsed)}s`;
-  if (elapsed < 3600) return `${Math.floor(elapsed / 60)}m`;
-  const h = Math.floor(elapsed / 3600);
-  const m = Math.floor((elapsed % 3600) / 60);
-  return `${h}h${m}m`;
+function formatElapsed(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return `${Math.floor(s)}s`;
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  if (m < 60) return `${m}m${String(sec).padStart(2, "0")}s`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return `${h}h${String(rm).padStart(2, "0")}m`;
+}
+
+function formatIdle(ms: number): string {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  if (rm === 0) return `${h}h ago`;
+  return `${h}h${rm}m ago`;
+}
+
+function useTimer(intervalMs = 1000): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
 }
 
 function shortenPath(p: string): string {
@@ -62,7 +86,22 @@ function tokenShort(tokens: number): string {
 }
 
 export default function SessionCard({ session, isHero, onClick }: Props) {
-  const dirName = session.workingDirectory.split("/").pop() ?? session.workingDirectory;
+  const now = useTimer();
+  const repoName = session.gitRepoName ?? session.workingDirectory.split("/").pop() ?? session.workingDirectory;
+  const suffix = session.gitWorktree ?? session.gitBranch;
+  const dirName = suffix ? `${repoName}/${suffix}` : repoName;
+  const isIdle = session.status === "active" && session.cpuPercent < 2.0;
+  const elapsed = isIdle
+    ? now - session.lastActivity
+    : now - (session.taskStartedAt ?? session.startedAt);
+  const buddyId = session.workingDirectory + (suffix ?? "");
+  const traits = buddyTraitsFromId(buddyId);
+  const isWorking = session.status === "active" && session.cpuPercent >= 2.0;
+  const statusColor: BuddyColor = session.status === "waitingApproval" ? "orange"
+    : session.status === "waitingAnswer" ? "cyan"
+    : session.status === "error" ? "red"
+    : isWorking ? traits.color
+    : "gray";
 
   return (
     <div
@@ -71,17 +110,12 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     >
       {/* Top row */}
       <div className="flex items-center gap-1.5">
-        <div className={`h-2 w-2 shrink-0 rounded-full ${STATUS_COLORS[session.status]}`} />
+        <PixelBuddy color={statusColor} isActive={isWorking} traits={traits} />
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-white">
           {session.taskName ?? dirName}
         </div>
-        {(session.gitWorktree || session.gitBranch) && (
-          <div className="shrink-0 truncate max-w-[100px] font-mono text-[10px] text-text-dim">
-            {session.gitWorktree ? `~${session.gitWorktree}` : session.gitBranch}
-          </div>
-        )}
         <div className="shrink-0 font-mono text-[10px] text-text-dim">
-          {formatDuration(session.startedAt)}
+          {isIdle ? formatIdle(elapsed) : formatElapsed(elapsed)}
         </div>
       </div>
 
@@ -111,7 +145,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
             {session.workingDirectory}
           </div>
 
-          {session.maxContextTokens > 0 && (
+          {(
             <div className="mt-1.5 flex items-center gap-1.5">
               <div className="flex-1">
                 <PixelProgressBar

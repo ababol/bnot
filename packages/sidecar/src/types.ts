@@ -76,6 +76,7 @@ export interface AgentSession {
   status: SessionStatus;
   startedAt: number;
   lastActivity: number;
+  taskStartedAt?: number;
   currentTool?: string;
   currentFilePath?: string;
   pendingApproval?: {
@@ -99,6 +100,7 @@ export interface AgentSession {
   cpuPercent: number;
   gitBranch?: string;
   gitWorktree?: string;
+  gitRepoName?: string;
 }
 
 // IPC protocol between Tauri and sidecar
