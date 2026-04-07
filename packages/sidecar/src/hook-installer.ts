@@ -6,6 +6,10 @@ const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 
 export async function installHooksIfNeeded(bridgePath?: string) {
   const bridge = bridgePath ?? (await findBridgePath());
+  if (!bridge) {
+    process.stderr.write("[hookInstaller] buddy-bridge binary not found, skipping hook install\n");
+    return;
+  }
 
   let settings: Record<string, unknown>;
   try {
@@ -56,7 +60,7 @@ export async function installHooksIfNeeded(bridgePath?: string) {
   }
 }
 
-async function findBridgePath(): Promise<string> {
+async function findBridgePath(): Promise<string | null> {
   const cwd = process.cwd();
   const candidates = [
     // Bundled inside .app Resources
@@ -78,5 +82,5 @@ async function findBridgePath(): Promise<string> {
     }
   }
 
-  return "buddy-bridge";
+  return null;
 }
