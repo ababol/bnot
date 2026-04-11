@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSession } from "../context/session-context";
 import { buddyColorFromSessions } from "../lib/colors";
+import HistoryCard from "./history-card";
 import PixelBuddy from "./pixel-buddy";
 import SessionCard from "./session-card";
 
@@ -11,6 +12,7 @@ interface Props {
 export default function OverviewView({ notchHeight }: Props) {
   const { state, dispatch } = useSession();
   const sessions = state.sessions;
+  const history = state.history;
   const sortedSessions = Object.values(sessions).sort((a, b) =>
     a.workingDirectory.localeCompare(b.workingDirectory),
   );
@@ -23,11 +25,15 @@ export default function OverviewView({ notchHeight }: Props) {
   };
 
   const handleSessionClick = (sessionId: string) => {
-    // Close panel FIRST so it doesn't steal focus from the terminal
     dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
     invoke("set_panel_state", { state: "compact" });
-    // Then jump — slight delay lets the panel shrink before activating terminal
     setTimeout(() => invoke("jump_to_session", { sessionId }), 80);
+  };
+
+  const handleResumeClick = (sessionId: string, projectPath: string) => {
+    dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
+    invoke("set_panel_state", { state: "compact" });
+    setTimeout(() => invoke("resume_session", { sessionId, projectPath }), 80);
   };
 
   return (
@@ -49,9 +55,9 @@ export default function OverviewView({ notchHeight }: Props) {
       </div>
 
       {/* Session list */}
-      {sortedSessions.length === 0 ? (
+      {sortedSessions.length === 0 && history.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-xs text-text-dim">
-          No active sessions
+          No sessions
         </div>
       ) : (
         <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-3">
@@ -61,6 +67,22 @@ export default function OverviewView({ notchHeight }: Props) {
               session={session}
               isHero={session.id === heroId}
               onClick={() => handleSessionClick(session.id)}
+            />
+          ))}
+
+          {sortedSessions.length > 0 && history.length > 0 && (
+            <div className="flex items-center gap-2 py-1">
+              <div className="h-px flex-1 bg-white/10" />
+              <span className="text-[10px] text-text-dim">Recent</span>
+              <div className="h-px flex-1 bg-white/10" />
+            </div>
+          )}
+
+          {history.map((session) => (
+            <HistoryCard
+              key={session.sessionId}
+              session={session}
+              onClick={() => handleResumeClick(session.sessionId, session.projectPath)}
             />
           ))}
         </div>

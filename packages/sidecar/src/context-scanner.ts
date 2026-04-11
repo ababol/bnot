@@ -12,6 +12,7 @@ interface SessionInfo {
   model?: string;
   estimatedContext: number;
   title?: string;
+  agentColor?: string;
 }
 
 export class ContextScanner {
@@ -20,6 +21,8 @@ export class ContextScanner {
   private sm: SessionManager;
   private exactCounts: Record<string, { used: number; max: number; model: string }> = {};
   private cachedTitles: Record<string, string> = {};
+  private namedSessions = new Set<string>();
+  private coloredSessions = new Set<string>();
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -54,7 +57,7 @@ export class ContextScanner {
       try {
         const data = await fs.readFile(path.join(sessionsDir, file), "utf-8");
         const meta = JSON.parse(data);
-        const { pid, sessionId, cwd } = meta;
+        const { pid, sessionId, cwd, name: sessionName } = meta;
         if (!pid || !sessionId || !cwd) continue;
 
         // Check if process is still alive
@@ -91,8 +94,42 @@ export class ContextScanner {
         this.sm.sessions[targetId].modelName = info.model;
         this.sm.sessions[targetId].sessionFilePath = jsonlPath;
 
+        if (sessionName) {
+          this.sm.sessions[targetId].sessionName = sessionName;
+        } else if (!this.namedSessions.has(sessionId)) {
+          const autoName = await this.autoNameSession(
+            path.join(sessionsDir, file),
+            jsonlPath,
+          );
+          if (autoName) {
+            this.sm.sessions[targetId].sessionName = autoName;
+            this.namedSessions.add(sessionId);
+          }
+        }
         if (info.title) {
           this.sm.sessions[targetId].taskName = info.title;
+        }
+        if (info.agentColor) {
+          this.sm.sessions[targetId].agentColor = info.agentColor;
+        } else if (!this.coloredSessions.has(sessionId)) {
+          // Auto-set color to match buddy's identity color
+          const suffix = this.sm.sessions[targetId].gitWorktree
+            ?? this.sm.sessions[targetId].gitBranch ?? "";
+          const buddyColor = hashToClaudeColor(
+            this.sm.sessions[targetId].workingDirectory + suffix,
+          );
+          try {
+            const entry = JSON.stringify({
+              type: "agent-color",
+              agentColor: buddyColor,
+              sessionId,
+            });
+            await fs.appendFile(jsonlPath, entry + "\n");
+            this.sm.sessions[targetId].agentColor = buddyColor;
+            this.coloredSessions.add(sessionId);
+          } catch {
+            // write failed, try again next scan
+          }
         }
 
         // Use exact count if available, otherwise estimation
@@ -147,6 +184,11 @@ export class ContextScanner {
         continue;
       }
 
+      // Detect /color setting
+      if (!info.agentColor && obj.type === "agent-color" && obj.agentColor) {
+        info.agentColor = obj.agentColor;
+      }
+
       const msg = obj.message;
       if (!info.model && msg?.model) {
         info.model = msg.model;
@@ -171,7 +213,7 @@ export class ContextScanner {
         }
       }
 
-      if (info.estimatedContext > 0 && info.model) break;
+      if (info.estimatedContext > 0 && info.model && info.agentColor) break;
     }
 
     return info;
@@ -207,6 +249,79 @@ export class ContextScanner {
         const repo = cwd.split("/").pop() ?? "";
         return repo ? `${repo}/${branch}` : branch;
       }
+    }
+
+    return undefined;
+  }
+
+  private async autoNameSession(metaPath: string, jsonlPath: string): Promise<string | undefined> {
+    const STOP_WORDS = new Set([
+      "i", "want", "to", "a", "the", "can", "you", "please", "me", "help",
+      "with", "this", "my", "for", "in", "on", "is", "it", "do", "an",
+      "of", "and", "that", "be", "have", "we", "need", "would", "like",
+    ]);
+
+    let text: string;
+    try {
+      const handle = await fs.open(jsonlPath, "r");
+      const buf = Buffer.alloc(8192);
+      const { bytesRead } = await handle.read(buf, 0, 8192, 0);
+      await handle.close();
+      text = buf.toString("utf-8", 0, bytesRead);
+    } catch {
+      return undefined;
+    }
+
+    const lines = text.split("\n");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let obj;
+      try {
+        obj = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      const msg = obj.message ?? obj;
+      if (msg.role !== "user") continue;
+
+      let content = "";
+      if (typeof msg.content === "string") {
+        content = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        content = msg.content
+          .filter((c: { type: string }) => c.type === "text")
+          .map((c: { text: string }) => c.text)
+          .join(" ");
+      }
+      if (!content) continue;
+
+      const words = content
+        .replace(/[^a-zA-Z0-9\s]/g, " ")
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.length > 0)
+        .map((w) => w.toLowerCase());
+
+      const meaningful = words.filter((w) => !STOP_WORDS.has(w));
+      const slug = (meaningful.length >= 2 ? meaningful : words)
+        .slice(0, 5)
+        .join("-")
+        .slice(0, 50);
+
+      if (!slug) continue;
+
+      // Write name to session metadata so Claude Code picks it up too
+      try {
+        const data = await fs.readFile(metaPath, "utf-8");
+        const meta = JSON.parse(data);
+        meta.name = slug;
+        await fs.writeFile(metaPath, JSON.stringify(meta));
+      } catch {
+        // still return the name for display even if write fails
+      }
+
+      return slug;
     }
 
     return undefined;
@@ -291,4 +406,19 @@ function maxTokens(model: string): number {
   if (m.includes("sonnet")) return 200_000;
   if (m.includes("haiku")) return 200_000;
   return 200_000;
+}
+
+// Claude Code /color accepts: red, blue, green, yellow, purple, orange, pink, cyan
+const CLAUDE_COLORS = [
+  "green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red",
+];
+
+function djb2(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function hashToClaudeColor(id: string): string {
+  return CLAUDE_COLORS[djb2(id) % CLAUDE_COLORS.length];
 }

@@ -78,6 +78,12 @@ fn main() {
         .and_then(|h| h.cwd.clone())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().to_string_lossy().to_string());
 
+    let session_mode = hook.as_ref().and_then(|h| {
+        h.session_type.as_deref().and_then(|t| {
+            if t == "plan" { Some("plan") } else { None }
+        })
+    });
+
     match cli.command {
         Commands::PreTool => {
             // Build diff preview
@@ -126,6 +132,7 @@ fn main() {
                         terminal_pid: get_parent_pid(),
                     },
                 },
+                session_mode,
             };
 
             let pre_tool = SocketMessage {
@@ -143,6 +150,7 @@ fn main() {
                         blocking: will_block,
                     },
                 },
+                session_mode,
             };
 
             if will_block {
@@ -176,6 +184,7 @@ fn main() {
                         terminal_pid: get_parent_pid(),
                     },
                 },
+                session_mode,
             });
 
             let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
@@ -197,6 +206,7 @@ fn main() {
                         was_approved: true,
                     },
                 },
+                session_mode,
             });
         }
 
@@ -214,6 +224,7 @@ fn main() {
                         level: "info",
                     },
                 },
+                session_mode,
             });
         }
 
@@ -227,6 +238,7 @@ fn main() {
                         reason: Some("completed"),
                     },
                 },
+                session_mode,
             });
         }
     }
@@ -328,6 +340,8 @@ struct SocketMessage<'a> {
     session_id: &'a str,
     timestamp: &'a str,
     payload: Payload<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_mode: Option<&'a str>,
 }
 
 #[derive(Serialize)]

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect } from "react";
-import type { AgentSession } from "../context/types";
+import type { AgentSession, HistorySession } from "../context/types";
 
 interface SessionsUpdatedPayload {
   sessions: Record<string, AgentSession>;
@@ -17,6 +17,7 @@ export function useTauriEvents(
         heroId: string | null;
       }
     | { type: "SET_PANEL_STATE"; panelState: "compact" | "overview" | "approval" | "ask" | "jump" }
+    | { type: "UPDATE_HISTORY"; history: HistorySession[] }
   >,
   panelState: string,
 ) {
@@ -35,6 +36,10 @@ export function useTauriEvents(
       const state = event.payload.state as "compact" | "overview" | "approval" | "ask" | "jump";
       dispatch({ type: "SET_PANEL_STATE", panelState: state });
       invoke("set_panel_state", { state });
+    }).then((u) => unlisten.push(u));
+
+    listen<{ history: HistorySession[] }>("historyUpdated", (event) => {
+      dispatch({ type: "UPDATE_HISTORY", history: event.payload.history });
     }).then((u) => unlisten.push(u));
 
     return () => {

@@ -36,6 +36,12 @@ const STATUS_TEXT: Record<SessionStatus, string> = {
   error: "Error",
 };
 
+const MODE_BADGE: Record<string, { label: string; bg: string; text: string }> = {
+  plan: { label: "PLAN", bg: "bg-[#1a3a3a]", text: "text-[#6abfbf]" },
+  auto: { label: "AUTO", bg: "bg-[#3a3520]", text: "text-[#bfaa5a]" },
+  dangerous: { label: "YOLO", bg: "bg-[#3a2020]", text: "text-[#bf6a6a]" },
+};
+
 function formatElapsed(ms: number): string {
   const s = ms / 1000;
   if (s < 60) return `${Math.floor(s)}s`;
@@ -87,12 +93,13 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     ? now - session.lastActivity
     : now - (session.taskStartedAt ?? session.startedAt);
   const buddyId = session.workingDirectory + (suffix ?? "");
-  const traits = buddyTraitsFromId(buddyId);
+  const traits = buddyTraitsFromId(buddyId, suffix ?? undefined);
+  const identityColor: BuddyColor = (session.agentColor as BuddyColor) ?? traits.color;
   const isWorking = session.status === "active" && session.cpuPercent >= 2.0;
   const statusColor: BuddyColor = session.status === "waitingApproval" ? "orange"
     : session.status === "waitingAnswer" ? "cyan"
     : session.status === "error" ? "red"
-    : isWorking ? traits.color
+    : isWorking ? identityColor
     : "gray";
 
   return (
@@ -102,13 +109,20 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     >
       {/* Top row */}
       <div className="flex items-center gap-1.5">
-        <PixelBuddy color={statusColor} isActive={isWorking} traits={traits} />
+        <PixelBuddy color={statusColor} identityColor={identityColor} isActive={isWorking} traits={traits} />
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-white">
-          {session.taskName ?? dirName}
+          {session.sessionName ?? session.taskName ?? dirName}
         </div>
         <div className="shrink-0 font-mono text-[10px] text-text-dim">
           {isIdle ? formatIdle(elapsed) : formatElapsed(elapsed)}
         </div>
+        {session.sessionMode && MODE_BADGE[session.sessionMode] && (
+          <span
+            className={`shrink-0 rounded px-1 py-px text-[9px] font-bold ${MODE_BADGE[session.sessionMode].bg} ${MODE_BADGE[session.sessionMode].text}`}
+          >
+            {MODE_BADGE[session.sessionMode].label}
+          </span>
+        )}
       </div>
 
       {/* Hero details */}

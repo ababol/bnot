@@ -6,12 +6,14 @@ mod tray;
 mod window;
 
 use tauri::Manager;
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_notch_geometry,
             commands::set_panel_state,
@@ -21,6 +23,7 @@ pub fn run() {
             commands::jump_to_session,
             commands::approve_session,
             commands::deny_session,
+            commands::resume_session,
         ])
         .setup(|app| {
             let win = app.get_webview_window("main").expect("main window");
@@ -53,6 +56,26 @@ pub fn run() {
             let handle = app.handle().clone();
             let _sidecar = sidecar::SidecarManager::spawn(&handle);
             app.manage(_sidecar);
+
+            // Handle deep link URLs (buddynotch://worktree?...)
+            let dl_handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url_obj in event.urls() {
+                    let url_str = url_obj.as_str();
+                    eprintln!("[deep-link] received: {url_str}");
+                    if let Ok(parsed) = url::Url::parse(url_str) {
+                        if parsed.host_str() == Some("worktree") {
+                            let params: serde_json::Value = parsed
+                                .query_pairs()
+                                .map(|(k, v)| (k.to_string(), serde_json::Value::String(v.to_string())))
+                                .collect::<serde_json::Map<String, serde_json::Value>>()
+                                .into();
+                            let sidecar = dl_handle.state::<crate::sidecar::SidecarManager>();
+                            sidecar.send_request("openWorktree", params);
+                        }
+                    }
+                }
+            });
 
             Ok(())
         })

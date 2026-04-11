@@ -1,21 +1,35 @@
-export type BuddyColor = "green" | "blue" | "orange" | "cyan" | "gray" | "red";
+export type BuddyColor =
+  | "green" | "blue" | "orange" | "cyan" | "gray" | "red"
+  | "purple" | "pink" | "yellow" | "lime" | "white" | "lavender";
 
 export const MAIN_COLORS: Record<BuddyColor, string> = {
-  green: "rgb(74, 222, 128)", // 0.29, 0.87, 0.50
-  blue: "rgb(97, 166, 250)", // 0.38, 0.65, 0.98
-  orange: "rgb(250, 173, 87)", // 0.98, 0.68, 0.34
-  cyan: "rgb(97, 212, 222)", // 0.38, 0.83, 0.87
+  green: "rgb(74, 222, 128)",
+  blue: "rgb(97, 166, 250)",
+  orange: "rgb(250, 173, 87)",
+  cyan: "rgb(97, 212, 222)",
   gray: "rgb(120, 120, 130)",
   red: "rgb(250, 87, 87)",
+  purple: "rgb(180, 130, 255)",
+  pink: "rgb(255, 130, 180)",
+  yellow: "rgb(250, 230, 90)",
+  lime: "rgb(170, 240, 80)",
+  white: "rgb(220, 225, 235)",
+  lavender: "rgb(160, 170, 255)",
 };
 
 export const BRIGHT_COLORS: Record<BuddyColor, string> = {
-  green: "rgb(128, 255, 166)", // 0.50, 1.0, 0.65
-  blue: "rgb(140, 204, 255)", // 0.55, 0.80, 1.0
-  orange: "rgb(255, 217, 128)", // 1.0, 0.85, 0.50
-  cyan: "rgb(140, 255, 255)", // 0.55, 1.0, 1.0
+  green: "rgb(128, 255, 166)",
+  blue: "rgb(140, 204, 255)",
+  orange: "rgb(255, 217, 128)",
+  cyan: "rgb(140, 255, 255)",
   gray: "rgb(160, 160, 170)",
   red: "rgb(255, 140, 140)",
+  purple: "rgb(210, 170, 255)",
+  pink: "rgb(255, 175, 210)",
+  yellow: "rgb(255, 245, 150)",
+  lime: "rgb(200, 255, 130)",
+  white: "rgb(245, 248, 255)",
+  lavender: "rgb(195, 200, 255)",
 };
 
 // --- Unique buddy traits ---
@@ -34,7 +48,10 @@ export interface BuddyTraits {
 const HATS: BuddyHat[] = ["none", "cap", "horn", "crown"];
 const EARS: BuddyEars[] = ["both", "left", "right", "floppy"];
 const EYES: BuddyEyes[] = ["normal", "winkLeft", "winkRight"];
-const BUDDY_COLORS: BuddyColor[] = ["green", "blue", "orange", "cyan"];
+const BUDDY_COLORS: BuddyColor[] = [
+  "green", "blue", "orange", "cyan", "purple",
+  "pink", "yellow", "lime", "white", "lavender",
+];
 
 function djb2(s: string): number {
   let h = 5381;
@@ -42,11 +59,26 @@ function djb2(s: string): number {
   return Math.abs(h);
 }
 
-export function buddyTraitsFromId(id: string): BuddyTraits {
+const HAT_KEYWORDS: [string[], BuddyHat][] = [
+  [["feat", "feature", "add", "new", "build"], "cap"],
+  [["fix", "bug", "hotfix", "patch", "issue"], "horn"],
+  [["design", "ui", "style", "css", "art", "frontend"], "crown"],
+  [["refactor", "clean", "chore", "perf", "optim"], "none"],
+];
+
+function hatFromKeywords(branch: string): BuddyHat | null {
+  const lower = branch.toLowerCase();
+  for (const [keywords, hat] of HAT_KEYWORDS) {
+    if (keywords.some((kw) => lower.includes(kw))) return hat;
+  }
+  return null;
+}
+
+export function buddyTraitsFromId(id: string, branch?: string): BuddyTraits {
   const h = djb2(id);
   return {
     color: BUDDY_COLORS[h % BUDDY_COLORS.length],
-    hat: HATS[(h >> 4) % HATS.length],
+    hat: (branch ? hatFromKeywords(branch) : null) ?? HATS[(h >> 4) % HATS.length],
     ears: EARS[(h >> 8) % EARS.length],
     eyes: EYES[(h >> 12) % EYES.length],
   };

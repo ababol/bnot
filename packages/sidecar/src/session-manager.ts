@@ -1,5 +1,5 @@
 import { emit } from "./ipc.js";
-import type { AgentSession, SocketMessage } from "./types.js";
+import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
 
 const DANGEROUS_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"]);
 
@@ -22,7 +22,7 @@ export class SessionManager {
   }
 
   handleMessage(msg: SocketMessage, clientFd: number) {
-    const { type, sessionId, timestamp, payload } = msg;
+    const { type, sessionId, timestamp, payload, sessionMode } = msg;
 
     switch (type) {
       case "sessionStart": {
@@ -156,6 +156,16 @@ export class SessionManager {
     // Store clientFd for approval responses
     if (type === "preToolUse") {
       this.pendingApprovalClients[sessionId] = clientFd;
+    }
+
+    // Update session mode from hook event (plan mode is togglable mid-session)
+    if (sessionMode && this.sessions[sessionId]) {
+      const mode = sessionMode as SessionMode;
+      const current = this.sessions[sessionId].sessionMode;
+      // Only update if hook reports plan, or if no stronger mode is set from process scanner
+      if (mode === "plan" || (current !== "dangerous" && current !== "auto")) {
+        this.sessions[sessionId].sessionMode = mode;
+      }
     }
 
     this.emitUpdate();
