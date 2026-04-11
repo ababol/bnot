@@ -1,14 +1,31 @@
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { emit } from "./ipc.js";
 import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
+
+const exec = promisify(execFile);
 
 const DEBOUNCE_MS = 50;
 const PANEL_RESET_DELAY_MS = 6000;
 const DANGEROUS_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"]);
 
+const CLAUDE_COLORS = ["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
+
+function djb2(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function hashColor(id: string): string {
+  return CLAUDE_COLORS[djb2(id) % CLAUDE_COLORS.length];
+}
+
 export class SessionManager {
   sessions: Record<string, AgentSession> = {};
   heroSessionId: string | null = null;
   pendingApprovalClients: Record<string, number> = {};
+  coloredSessions = new Set<string>();
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -171,6 +188,57 @@ export class SessionManager {
     }
 
     this.emitUpdate();
+  }
+
+  /**
+   * Inject /color into a Claude Code session via AppleScript keystroke injection.
+   * Uses TTY marker to focus the exact Ghostty tab, injects the command,
+   * then returns focus to the previous app.
+   */
+  tryInjectColor(session: AgentSession) {
+    if (this.coloredSessions.has(session.id)) return;
+    this._doInjectColor(session);
+  }
+
+  private async _doInjectColor(session: AgentSession) {
+    const tty = session.tty;
+    if (!tty || !/^ttys\d+$/.test(tty)) return;
+    if (session.terminalApp && session.terminalApp !== "Ghostty") return;
+
+    const color = hashColor(session.workingDirectory + session.id);
+    session.agentColor = color;
+    this.coloredSessions.add(session.id);
+
+    try {
+      // Write OSC title marker to identify the right tab
+      const { writeFile } = await import("fs/promises");
+      const marker = `buddy-color-${Math.random().toString(36).slice(2, 6)}`;
+      await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
+      await new Promise((r) => setTimeout(r, 150));
+
+      const script = `
+tell application "System Events"
+  set frontApp to name of first process whose frontmost is true
+end tell
+tell application "Ghostty"
+  set matches to every terminal whose name is "${marker}"
+  if (count of matches) > 0 then
+    focus item 1 of matches
+  end if
+end tell
+delay 0.15
+tell application "System Events"
+  keystroke "/color ${color}"
+  keystroke return
+end tell
+delay 0.2
+tell application frontApp
+  activate
+end tell`;
+      await exec("/usr/bin/osascript", ["-e", script]);
+    } catch {
+      // Terminal injection failed — not critical
+    }
   }
 
   private ensureSession(sessionId: string, timestamp: string) {

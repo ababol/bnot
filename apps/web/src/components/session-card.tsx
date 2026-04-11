@@ -1,8 +1,8 @@
 import type { AgentSession, SessionStatus } from "../context/types";
-import { contextPercent, directoryName, isIdle } from "../context/types";
+import { contextPercent, directoryName, isIdle, isWorking } from "../context/types";
 import { useTimer } from "../hooks/use-timer";
 import type { BuddyColor } from "../lib/colors";
-import { buddyTraitsFromId, parseBuddyColor, sessionStatusColor } from "../lib/colors";
+import { buddyTraitsFromId, parseBuddyColor, sessionStatusDot } from "../lib/colors";
 import { formatElapsed, formatIdle, shortenPath, tokenShort } from "../lib/format";
 import PixelBuddy from "./pixel-buddy";
 import PixelProgressBar from "./pixel-progress-bar";
@@ -48,15 +48,15 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
   const repoName = session.gitRepoName ?? directoryName(session);
   const suffix = session.gitWorktree ?? session.gitBranch;
   const dirName = suffix ? `${repoName}/${suffix}` : repoName;
-  const idle = isIdle(session);
+  const idle = isIdle(session, now);
   const elapsed = idle
     ? now - session.lastActivity
     : now - (session.taskStartedAt ?? session.startedAt);
   const buddyId = session.workingDirectory + (suffix ?? "");
   const traits = buddyTraitsFromId(buddyId, suffix ?? undefined);
-  const identityColor: BuddyColor = parseBuddyColor(session.agentColor) ?? traits.color;
-  const isWorking = session.status === "active" && session.cpuPercent >= 2.0;
-  const statusColor = sessionStatusColor(session.status, session.cpuPercent, identityColor);
+  const buddyColor: BuddyColor = parseBuddyColor(session.agentColor) ?? traits.color;
+  const working = isWorking(session, now);
+  const dot = sessionStatusDot(session.status, working, session.sessionMode);
 
   return (
     <div
@@ -65,12 +65,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     >
       {/* Top row */}
       <div className="flex items-center gap-1.5">
-        <PixelBuddy
-          color={statusColor}
-          identityColor={identityColor}
-          isActive={isWorking}
-          traits={traits}
-        />
+        <PixelBuddy color={buddyColor} isActive={working} traits={traits} dot={dot} />
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-white">
           {session.sessionName ?? session.taskName ?? dirName}
         </div>

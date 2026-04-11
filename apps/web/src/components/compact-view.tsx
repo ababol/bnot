@@ -1,16 +1,11 @@
 import { useSession } from "../context/session-context";
-import { contextPercent } from "../context/types";
+import { contextPercent, isWorking } from "../context/types";
 import { useHeroSession } from "../hooks/use-hero-session";
+import { useTimer } from "../hooks/use-timer";
 import type { BuddyColor } from "../lib/colors";
-import { buddyTraitsFromId, MAIN_COLORS, parseBuddyColor, sessionStatusColor } from "../lib/colors";
+import { buddyTraitsFromId, MAIN_COLORS, parseBuddyColor, sessionStatusDot } from "../lib/colors";
 import { setPanelState } from "../lib/tauri";
 import PixelBuddy from "./pixel-buddy";
-
-const MODE_DOT_COLOR: Record<string, string> = {
-  plan: "bg-buddy-cyan",
-  auto: "bg-buddy-yellow",
-  dangerous: "bg-buddy-red",
-};
 
 interface Props {
   notchWidth: number;
@@ -30,14 +25,13 @@ export default function CompactView({ notchWidth }: Props) {
   const heroTraits = heroSession
     ? buddyTraitsFromId(heroSession.workingDirectory + heroSuffix, heroSuffix || undefined)
     : undefined;
-  const heroIsWorking = heroSession
-    ? heroSession.status === "active" && heroSession.cpuPercent >= 2.0
-    : false;
-  const heroIdentityColor: BuddyColor | undefined =
-    parseBuddyColor(heroSession?.agentColor) ?? heroTraits?.color;
-  const heroColor: BuddyColor = heroSession
-    ? sessionStatusColor(heroSession.status, heroSession.cpuPercent, heroIdentityColor ?? "green")
-    : "gray";
+  const now = useTimer();
+  const heroIsWorking = heroSession ? isWorking(heroSession, now) : false;
+  const heroColor: BuddyColor =
+    parseBuddyColor(heroSession?.agentColor) ?? heroTraits?.color ?? "gray";
+  const heroDot = heroSession
+    ? sessionStatusDot(heroSession.status, heroIsWorking, heroSession.sessionMode)
+    : undefined;
 
   const handleClick = () => {
     setPanelState(dispatch, "overview");
@@ -56,9 +50,9 @@ export default function CompactView({ notchWidth }: Props) {
           <div className="flex items-center gap-1">
             <PixelBuddy
               color={heroColor}
-              identityColor={heroIdentityColor}
               isActive={heroIsWorking}
               traits={heroTraits}
+              dot={heroDot}
             />
             {heroSession && (
               <div className="relative h-[14px] w-[4px] overflow-hidden rounded-sm bg-white/10">
@@ -70,11 +64,6 @@ export default function CompactView({ notchWidth }: Props) {
                   }}
                 />
               </div>
-            )}
-            {heroSession?.sessionMode && MODE_DOT_COLOR[heroSession.sessionMode] && (
-              <div
-                className={`h-[5px] w-[5px] rounded-full ${MODE_DOT_COLOR[heroSession.sessionMode]}`}
-              />
             )}
           </div>
         )}

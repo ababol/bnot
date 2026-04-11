@@ -11,7 +11,6 @@ const INITIAL_SCAN_DELAY_MS = 3000;
 const SCAN_INTERVAL_MS = 3000;
 const EXACT_QUERY_INTERVAL_MS = 60000;
 const TAIL_READ_BYTES = 65536;
-const HEAD_READ_BYTES = 8192;
 const ESTIMATION_RATIO = 0.85;
 const OVER_RATIO_OFFSET = 0.08;
 const MIN_FILL_PERCENT = 0.3;
@@ -20,7 +19,7 @@ const MAX_FILL_PERCENT = 0.7;
 interface SessionInfo {
   model?: string;
   estimatedContext: number;
-  title?: string;
+  sessionName?: string; // custom-title > agent-name > ai-title
   agentColor?: string;
 }
 
@@ -29,9 +28,6 @@ export class ContextScanner {
   private exactTimer: ReturnType<typeof setInterval> | null = null;
   private sm: SessionManager;
   private exactCounts: Record<string, { used: number; max: number; model: string }> = {};
-  private cachedTitles: Record<string, string> = {};
-  private namedSessions = new Set<string>();
-  private coloredSessions = new Set<string>();
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -87,55 +83,32 @@ export class ContextScanner {
         const info = await this.readSessionInfo(jsonlPath);
         const procId = `proc-${pid}`;
 
-        // Find matching session
-        const matchingEntry = Object.entries(this.sm.sessions).find(
-          ([k, v]) => !k.startsWith("proc-") && v.workingDirectory === cwd,
-        );
-        const matchingId = matchingEntry?.[0] ?? procId;
-        const targetId = this.sm.sessions[matchingId]
-          ? matchingId
-          : this.sm.sessions[procId]
-            ? procId
-            : null;
+        // Find matching session: prefer exact sessionId, then claudeSessionId,
+        // then processPid, then proc-based ID
+        const targetId = this.sm.sessions[sessionId]
+          ? sessionId
+          : (Object.entries(this.sm.sessions).find(
+              ([, v]) => v.claudeSessionId === sessionId,
+            )?.[0] ??
+            Object.entries(this.sm.sessions).find(([, v]) => v.processPid === pid)?.[0] ??
+            (this.sm.sessions[procId] ? procId : null));
         if (!targetId) continue;
+
+        this.sm.sessions[targetId].claudeSessionId = sessionId;
 
         const maxCtx = maxTokens(info.model ?? "");
         this.sm.sessions[targetId].modelName = info.model;
         this.sm.sessions[targetId].sessionFilePath = jsonlPath;
 
+        // Read name and color from Claude Code's native JSONL entries
+        // Priority: metadata name > JSONL name (custom-title > agent-name > ai-title)
         if (sessionName) {
           this.sm.sessions[targetId].sessionName = sessionName;
-        } else if (!this.namedSessions.has(sessionId)) {
-          const autoName = await this.autoNameSession(path.join(sessionsDir, file), jsonlPath);
-          if (autoName) {
-            this.sm.sessions[targetId].sessionName = autoName;
-            this.namedSessions.add(sessionId);
-          }
-        }
-        if (info.title) {
-          this.sm.sessions[targetId].taskName = info.title;
+        } else if (info.sessionName) {
+          this.sm.sessions[targetId].sessionName = info.sessionName;
         }
         if (info.agentColor) {
           this.sm.sessions[targetId].agentColor = info.agentColor;
-        } else if (!this.coloredSessions.has(sessionId)) {
-          // Auto-set color to match buddy's identity color
-          const suffix =
-            this.sm.sessions[targetId].gitWorktree ?? this.sm.sessions[targetId].gitBranch ?? "";
-          const buddyColor = hashToClaudeColor(
-            this.sm.sessions[targetId].workingDirectory + suffix,
-          );
-          try {
-            const entry = JSON.stringify({
-              type: "agent-color",
-              agentColor: buddyColor,
-              sessionId,
-            });
-            await fs.appendFile(jsonlPath, entry + "\n");
-            this.sm.sessions[targetId].agentColor = buddyColor;
-            this.coloredSessions.add(sessionId);
-          } catch {
-            // write failed, try again next scan
-          }
         }
 
         // Use exact count if available, otherwise estimation
@@ -158,15 +131,7 @@ export class ContextScanner {
   private async readSessionInfo(jsonlPath: string): Promise<SessionInfo> {
     const info: SessionInfo = { estimatedContext: 0 };
 
-    // Read title (cached)
-    if (this.cachedTitles[jsonlPath]) {
-      info.title = this.cachedTitles[jsonlPath];
-    } else {
-      info.title = await this.readTitle(jsonlPath);
-      if (info.title) this.cachedTitles[jsonlPath] = info.title;
-    }
-
-    // Read last 64KB for usage estimation
+    // Read last 64KB for name, color, model, and usage estimation
     let text: string;
     try {
       const handle = await fs.open(jsonlPath, "r");
@@ -190,9 +155,19 @@ export class ContextScanner {
         continue;
       }
 
-      // Detect /color setting
+      // Claude Code native entry types (last-wins, reading in reverse)
       if (!info.agentColor && obj.type === "agent-color" && obj.agentColor) {
         info.agentColor = obj.agentColor;
+      }
+      // Session name priority: custom-title > agent-name > ai-title
+      if (!info.sessionName) {
+        if (obj.type === "custom-title" && obj.customTitle) {
+          info.sessionName = obj.customTitle;
+        } else if (obj.type === "agent-name" && obj.agentName) {
+          info.sessionName = obj.agentName;
+        } else if (obj.type === "ai-title" && obj.title) {
+          info.sessionName = obj.title;
+        }
       }
 
       const msg = obj.message;
@@ -226,137 +201,6 @@ export class ContextScanner {
     }
 
     return info;
-  }
-
-  private async readTitle(jsonlPath: string): Promise<string | undefined> {
-    let text: string;
-    try {
-      const handle = await fs.open(jsonlPath, "r");
-      const stat = await handle.stat();
-      const readSize = Math.min(stat.size, TAIL_READ_BYTES);
-      const buf = Buffer.alloc(readSize);
-      await handle.read(buf, 0, readSize, stat.size - readSize);
-      await handle.close();
-      text = buf.toString("utf-8");
-    } catch {
-      return undefined;
-    }
-
-    const lines = text.split("\n").reverse();
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let obj;
-      try {
-        obj = JSON.parse(line);
-      } catch {
-        continue;
-      }
-
-      const branch = obj.gitBranch;
-      if (branch && typeof branch === "string") {
-        const cwd = (obj.cwd as string) ?? "";
-        const repo = cwd.split("/").pop() ?? "";
-        return repo ? `${repo}/${branch}` : branch;
-      }
-    }
-
-    return undefined;
-  }
-
-  private async autoNameSession(metaPath: string, jsonlPath: string): Promise<string | undefined> {
-    const STOP_WORDS = new Set([
-      "i",
-      "want",
-      "to",
-      "a",
-      "the",
-      "can",
-      "you",
-      "please",
-      "me",
-      "help",
-      "with",
-      "this",
-      "my",
-      "for",
-      "in",
-      "on",
-      "is",
-      "it",
-      "do",
-      "an",
-      "of",
-      "and",
-      "that",
-      "be",
-      "have",
-      "we",
-      "need",
-      "would",
-      "like",
-    ]);
-
-    let text: string;
-    try {
-      const handle = await fs.open(jsonlPath, "r");
-      const buf = Buffer.alloc(HEAD_READ_BYTES);
-      const { bytesRead } = await handle.read(buf, 0, HEAD_READ_BYTES, 0);
-      await handle.close();
-      text = buf.toString("utf-8", 0, bytesRead);
-    } catch {
-      return undefined;
-    }
-
-    const lines = text.split("\n");
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let obj;
-      try {
-        obj = JSON.parse(line);
-      } catch {
-        continue;
-      }
-
-      const msg = obj.message ?? obj;
-      if (msg.role !== "user") continue;
-
-      let content = "";
-      if (typeof msg.content === "string") {
-        content = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        content = msg.content
-          .filter((c: { type: string }) => c.type === "text")
-          .map((c: { text: string }) => c.text)
-          .join(" ");
-      }
-      if (!content) continue;
-
-      const words = content
-        .replace(/[^a-zA-Z0-9\s]/g, " ")
-        .trim()
-        .split(/\s+/)
-        .filter((w) => w.length > 0)
-        .map((w) => w.toLowerCase());
-
-      const meaningful = words.filter((w) => !STOP_WORDS.has(w));
-      const slug = (meaningful.length >= 2 ? meaningful : words).slice(0, 5).join("-").slice(0, 50);
-
-      if (!slug) continue;
-
-      // Write name to session metadata so Claude Code picks it up too
-      try {
-        const data = await fs.readFile(metaPath, "utf-8");
-        const meta = JSON.parse(data);
-        meta.name = slug;
-        await fs.writeFile(metaPath, JSON.stringify(meta));
-      } catch {
-        // still return the name for display even if write fails
-      }
-
-      return slug;
-    }
-
-    return undefined;
   }
 
   private async fetchExactContexts() {
@@ -438,17 +282,4 @@ function maxTokens(model: string): number {
   if (m.includes("sonnet")) return 200_000;
   if (m.includes("haiku")) return 200_000;
   return 200_000;
-}
-
-// Claude Code /color accepts: red, blue, green, yellow, purple, orange, pink, cyan
-const CLAUDE_COLORS = ["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
-
-function djb2(s: string): number {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
-function hashToClaudeColor(id: string): string {
-  return CLAUDE_COLORS[djb2(id) % CLAUDE_COLORS.length];
 }

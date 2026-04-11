@@ -122,16 +122,26 @@ export function parseBuddyColor(value: string | undefined): BuddyColor | undefin
   return undefined;
 }
 
-export function sessionStatusColor(
+// --- Status dot ---
+
+export type StatusDot = "working" | "planning" | "waiting" | "idle";
+
+export const STATUS_DOT_COLORS: Record<StatusDot, string> = {
+  working: "rgb(74, 222, 128)", // green
+  planning: "rgb(97, 212, 222)", // cyan
+  waiting: "rgb(250, 230, 90)", // yellow
+  idle: "rgb(120, 120, 130)", // gray
+};
+
+export function sessionStatusDot(
   status: string,
-  cpuPercent: number,
-  identityColor: BuddyColor,
-): BuddyColor {
-  if (status === "waitingApproval") return "orange";
-  if (status === "waitingAnswer") return "cyan";
-  if (status === "error") return "red";
-  if (status === "active" && cpuPercent >= 2.0) return identityColor;
-  return "gray";
+  isWorking: boolean,
+  sessionMode?: string,
+): StatusDot {
+  if (status === "waitingApproval" || status === "waitingAnswer") return "waiting";
+  if (sessionMode === "plan") return "planning";
+  if (isWorking) return "working";
+  return "idle";
 }
 
 /** Buddy body color based on context fill percent: green -> yellow -> red */

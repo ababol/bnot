@@ -86,6 +86,9 @@ fn main() {
         })
     });
 
+    // Auto-assign color on first hook event (read by BuddyNotch immediately, by Claude Code on resume)
+    auto_assign_color(&session_id, &cwd);
+
     match cli.command {
         Commands::PreTool => {
             // Build diff preview
@@ -332,6 +335,55 @@ fn send_and_wait(msg1: &SocketMessage, msg2: &SocketMessage) -> Option<ApprovalR
     }
 
     None
+}
+
+// --- Auto-assign color ---
+
+const CLAUDE_COLORS: &[&str] = &["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
+
+fn djb2(s: &str) -> u32 {
+    let mut h: u32 = 5381;
+    for b in s.bytes() {
+        h = h.wrapping_mul(33).wrapping_add(b as u32);
+    }
+    h
+}
+
+fn auto_assign_color(session_id: &str, cwd: &str) {
+    let home = match std::env::var("HOME") {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    let project_key = cwd.replace(['/', '.'], "-");
+    let path = format!("{home}/.claude/projects/{project_key}/{session_id}.jsonl");
+
+    if !std::path::Path::new(&path).exists() { return; }
+
+    // Read last 4KB to check if agent-color already exists
+    let has_color = match std::fs::File::open(&path) {
+        Ok(f) => {
+            let size = f.metadata().map(|m| m.len()).unwrap_or(0);
+            let read_size = std::cmp::min(size, 4096) as usize;
+            if read_size == 0 { false } else {
+                let mut buf = vec![0u8; read_size];
+                use std::io::{Seek, SeekFrom};
+                let mut f = f;
+                let _ = f.seek(SeekFrom::End(-(read_size as i64)));
+                let _ = std::io::Read::read(&mut f, &mut buf);
+                String::from_utf8_lossy(&buf).contains("agent-color")
+            }
+        }
+        Err(_) => return,
+    };
+
+    if !has_color {
+        let color = CLAUDE_COLORS[(djb2(&format!("{cwd}{session_id}")) as usize) % CLAUDE_COLORS.len()];
+        let entry = format!(
+            "{{\"type\":\"agent-color\",\"agentColor\":\"{color}\",\"sessionId\":\"{session_id}\"}}\n"
+        );
+        let _ = std::fs::OpenOptions::new().append(true).open(&path)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
+    }
 }
 
 // Wire types — must match sidecar/src/types.ts

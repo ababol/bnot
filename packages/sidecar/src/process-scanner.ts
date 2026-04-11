@@ -28,6 +28,7 @@ export class ProcessScanner {
   private timer: ReturnType<typeof setInterval> | null = null;
   private sm: SessionManager;
   private pendingDeletions = new Set<string>();
+  private firstScanDone = false;
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -128,8 +129,9 @@ export class ProcessScanner {
         const existingIsProc = existingId.startsWith("proc-");
         const newIsProc = id.startsWith("proc-");
 
-        // Don't merge two proc- sessions (multiple Claude instances in same dir)
-        if (existingIsProc && newIsProc) {
+        // Only merge a proc- session into a non-proc (hook-based) session.
+        // Never merge two of the same kind — they're separate Claude instances.
+        if (existingIsProc === newIsProc) {
           continue;
         }
 
@@ -160,10 +162,34 @@ export class ProcessScanner {
         ([k, v]) => !k.startsWith("proc-") && v.workingDirectory === (info.cwd ?? ""),
       );
       if (match) {
+        const hadTty = !!match[1].tty;
         match[1].tty = info.tty ?? undefined;
         match[1].processPid = info.pid;
         match[1].cpuPercent = info.cpuPercent;
+        // Trigger auto-color injection when TTY is first assigned (skip first scan)
+        if (this.firstScanDone && !hadTty && match[1].tty) {
+          this.sm.tryInjectColor(match[1]);
+        }
       }
+    }
+
+    // Also check proc- sessions that just got created with a TTY (skip first scan)
+    if (this.firstScanDone) {
+      for (const info of activePids) {
+        const sessionId = `proc-${info.pid}`;
+        const session = this.sm.sessions[sessionId];
+        if (session?.tty && !this.sm.coloredSessions.has(sessionId)) {
+          this.sm.tryInjectColor(session);
+        }
+      }
+    }
+
+    // Mark all existing sessions as already colored on first scan
+    if (!this.firstScanDone) {
+      for (const id of Object.keys(this.sm.sessions)) {
+        this.sm.coloredSessions.add(id);
+      }
+      this.firstScanDone = true;
     }
 
     this.updateHeroSession();

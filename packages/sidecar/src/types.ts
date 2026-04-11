@@ -109,6 +109,7 @@ export interface AgentSession {
   sessionMode?: SessionMode;
   sessionName?: string;
   agentColor?: string;
+  claudeSessionId?: string;
 }
 
 // History session from ~/.claude/projects/*/sessions-index.json

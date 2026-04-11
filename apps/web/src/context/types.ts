@@ -44,6 +44,7 @@ export interface AgentSession {
   sessionMode?: SessionMode;
   sessionName?: string;
   agentColor?: string;
+  claudeSessionId?: string;
 }
 
 // History session for resume after restart
@@ -59,6 +60,9 @@ export interface HistorySession {
 }
 
 // Derived helpers
+
+const ACTIVITY_RECENCY_MS = 10_000;
+
 export function contextPercent(s: AgentSession): number {
   if (s.maxContextTokens <= 0) return 0;
   return Math.min(s.contextTokens / s.maxContextTokens, 1.0);
@@ -68,8 +72,14 @@ export function directoryName(s: AgentSession): string {
   return s.workingDirectory.split("/").pop() ?? s.workingDirectory;
 }
 
-export function isIdle(s: AgentSession): boolean {
-  return s.status === "active" && s.cpuPercent < 2.0;
+export function isWorking(s: AgentSession, now: number): boolean {
+  return (
+    s.status === "active" && (s.currentTool != null || now - s.lastActivity < ACTIVITY_RECENCY_MS)
+  );
+}
+
+export function isIdle(s: AgentSession, now: number): boolean {
+  return s.status === "active" && !isWorking(s, now);
 }
 
 export function projectName(s: HistorySession): string {

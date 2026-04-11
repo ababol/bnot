@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import type { BuddyColor, BuddyTraits } from "../lib/colors";
-import { BRIGHT_COLORS, MAIN_COLORS } from "../lib/colors";
+import type { BuddyColor, BuddyTraits, StatusDot } from "../lib/colors";
+import { BRIGHT_COLORS, MAIN_COLORS, STATUS_DOT_COLORS } from "../lib/colors";
 
 interface Props {
   color: BuddyColor;
-  identityColor?: BuddyColor;
   isActive: boolean;
   traits?: BuddyTraits;
+  dot?: StatusDot;
 }
 
-export default function PixelBuddy({ color, identityColor, isActive, traits }: Props) {
+export default function PixelBuddy({ color, isActive, traits, dot }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [frame, setFrame] = useState(0);
-
-  const headColor = identityColor ?? color;
-  const bodyColor = color;
 
   useEffect(() => {
     if (!isActive) return;
@@ -37,9 +34,8 @@ export default function PixelBuddy({ color, identityColor, isActive, traits }: P
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, w, h);
 
-    const headMain = MAIN_COLORS[headColor];
-    const headBright = BRIGHT_COLORS[headColor];
-    const bodyMain = MAIN_COLORS[bodyColor];
+    const main = MAIN_COLORS[color];
+    const bright = BRIGHT_COLORS[color];
     const dark = "black";
     const blinking = isActive && frame % 20 === 0;
 
@@ -48,63 +44,77 @@ export default function PixelBuddy({ color, identityColor, isActive, traits }: P
       ctx.fillRect(ox + x * px, oy + y * px, px, px);
     };
 
-    // --- Hat (identity color) ---
+    // --- Hat ---
     const hat = traits?.hat ?? "none";
     if (hat === "cap") {
-      for (let x = 2; x <= 5; x++) fill(x, 0, headBright);
+      for (let x = 2; x <= 5; x++) fill(x, 0, bright);
     } else if (hat === "horn") {
-      fill(3, 0, headBright);
-      fill(4, 0, headBright);
+      fill(3, 0, bright);
+      fill(4, 0, bright);
     } else if (hat === "crown") {
-      fill(2, 0, headBright);
-      fill(4, 0, headBright);
-      fill(6, 0, headBright);
+      fill(2, 0, bright);
+      fill(4, 0, bright);
+      fill(6, 0, bright);
     }
 
-    // --- Ears (identity color) ---
+    // --- Ears ---
     const ears = traits?.ears ?? "both";
     if (ears === "both") {
-      fill(1, 1, headBright);
-      fill(6, 1, headBright);
+      fill(1, 1, bright);
+      fill(6, 1, bright);
     } else if (ears === "left") {
-      fill(1, 1, headBright);
+      fill(1, 1, bright);
     } else if (ears === "right") {
-      fill(6, 1, headBright);
+      fill(6, 1, bright);
     } else if (ears === "floppy") {
-      fill(0, 2, headBright);
-      fill(7, 2, headBright);
+      fill(0, 2, bright);
+      fill(7, 2, bright);
     }
 
-    // Head (identity color)
-    for (let x = 1; x <= 6; x++) fill(x, 2, headMain);
+    // Head
+    for (let x = 1; x <= 6; x++) fill(x, 2, main);
 
-    // --- Eyes (identity color) ---
+    // --- Eyes ---
     const eyes = traits?.eyes ?? "normal";
-    fill(1, 3, headMain);
-    fill(3, 3, headMain);
-    fill(4, 3, headMain);
-    fill(6, 3, headMain);
+    fill(1, 3, main);
+    fill(3, 3, main);
+    fill(4, 3, main);
+    fill(6, 3, main);
 
     if (eyes === "normal") {
-      fill(2, 3, blinking ? headMain : dark);
-      fill(5, 3, blinking ? headMain : dark);
+      fill(2, 3, blinking ? main : dark);
+      fill(5, 3, blinking ? main : dark);
     } else if (eyes === "winkLeft") {
-      fill(2, 3, headMain); // left eye always closed
-      fill(5, 3, blinking ? headMain : dark);
+      fill(2, 3, main); // left eye always closed
+      fill(5, 3, blinking ? main : dark);
     } else if (eyes === "winkRight") {
-      fill(2, 3, blinking ? headMain : dark);
-      fill(5, 3, headMain); // right eye always closed
+      fill(2, 3, blinking ? main : dark);
+      fill(5, 3, main); // right eye always closed
     }
 
-    // Body (status color)
-    for (let x = 1; x <= 6; x++) fill(x, 4, bodyMain);
+    // Body
+    for (let x = 1; x <= 6; x++) fill(x, 4, main);
 
-    // Feet (status color)
-    fill(1, 5, bodyMain);
-    fill(2, 5, bodyMain);
-    fill(5, 5, bodyMain);
-    fill(6, 5, bodyMain);
-  }, [frame, headColor, bodyColor, isActive, traits]);
+    // Feet
+    fill(1, 5, main);
+    fill(2, 5, main);
+    fill(5, 5, main);
+    fill(6, 5, main);
+
+    // --- Status dot (bottom-right, 3x3 px) ---
+    if (dot) {
+      const dotColor = STATUS_DOT_COLORS[dot];
+      fill(5, 5, dotColor);
+      fill(6, 5, dotColor);
+      fill(7, 5, dotColor);
+      fill(5, 6, dotColor);
+      fill(6, 6, dotColor);
+      fill(7, 6, dotColor);
+      fill(5, 7, dotColor);
+      fill(6, 7, dotColor);
+      fill(7, 7, dotColor);
+    }
+  }, [frame, color, isActive, traits, dot]);
 
   const bobY = isActive ? (frame % 6 < 3 ? -0.5 : 0.5) : 0;
 
