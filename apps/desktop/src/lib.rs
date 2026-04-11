@@ -21,6 +21,8 @@ pub fn run() {
             commands::navigate_pane,
             commands::activate_app,
             commands::jump_to_session,
+            commands::approve_session,
+            commands::deny_session,
             commands::resume_session,
         ])
         .setup(|app| {

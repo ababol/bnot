@@ -35,6 +35,7 @@ export function useTauriEvents(
     listen<{ state: string }>("panelStateChange", (event) => {
       const state = event.payload.state as "compact" | "overview" | "approval" | "ask" | "jump";
       dispatch({ type: "SET_PANEL_STATE", panelState: state });
+      invoke("set_panel_state", { state });
     }).then((u) => unlisten.push(u));
 
     listen<{ history: HistorySession[] }>("historyUpdated", (event) => {
@@ -48,7 +49,7 @@ export function useTauriEvents(
 
   // Collapse panel when window loses focus (user clicks outside)
   useEffect(() => {
-    if (panelState === "compact" || panelState === "jump") return;
+    if (panelState === "compact" || panelState === "jump" || panelState === "approval" || panelState === "ask") return;
 
     const win = getCurrentWebviewWindow();
     let unlisten: (() => void) | null = null;

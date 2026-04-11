@@ -1,6 +1,8 @@
 import { emit } from "./ipc.js";
 import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
 
+const DANGEROUS_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"]);
+
 export class SessionManager {
   sessions: Record<string, AgentSession> = {};
   heroSessionId: string | null = null;
@@ -57,7 +59,30 @@ export class SessionManager {
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].currentTool = p.toolName;
         this.sessions[sessionId].currentFilePath = p.filePath;
-        this.sessions[sessionId].status = "active";
+
+        if (p.toolName === "AskUserQuestion" && p.question) {
+          this.sessions[sessionId].status = "waitingAnswer";
+          this.sessions[sessionId].pendingQuestion = {
+            question: p.question,
+            options: p.options ?? [],
+            receivedAt: Date.now(),
+          };
+          this.heroSessionId = sessionId;
+          emit("panelStateChange", { state: "ask", sessionId });
+        } else if (DANGEROUS_TOOLS.has(p.toolName) && p.blocking) {
+          this.sessions[sessionId].status = "waitingApproval";
+          this.sessions[sessionId].pendingApproval = {
+            toolName: p.toolName,
+            filePath: p.filePath,
+            input: p.input,
+            diffPreview: p.diffPreview,
+            receivedAt: Date.now(),
+          };
+          this.heroSessionId = sessionId;
+          emit("panelStateChange", { state: "approval", sessionId });
+        } else {
+          this.sessions[sessionId].status = "active";
+        }
         break;
       }
 
@@ -66,8 +91,13 @@ export class SessionManager {
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].currentTool = undefined;
         this.sessions[sessionId].pendingApproval = undefined;
-        if (this.sessions[sessionId].status === "waitingApproval") {
+        this.sessions[sessionId].pendingQuestion = undefined;
+        if (
+          this.sessions[sessionId].status === "waitingApproval" ||
+          this.sessions[sessionId].status === "waitingAnswer"
+        ) {
           this.sessions[sessionId].status = "active";
+          emit("panelStateChange", { state: "compact" });
         }
         delete this.pendingApprovalClients[sessionId];
         break;

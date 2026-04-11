@@ -49,6 +49,7 @@ onRequest(async (method, params) => {
           sm.sessions[sessionId].status = "active";
         }
         delete sm.pendingApprovalClients[sessionId];
+        emit("panelStateChange", { state: "compact" });
         sm.emitUpdate();
       }
       return { success: true };
@@ -64,6 +65,7 @@ onRequest(async (method, params) => {
           sm.sessions[sessionId].status = "active";
         }
         delete sm.pendingApprovalClients[sessionId];
+        emit("panelStateChange", { state: "compact" });
         sm.emitUpdate();
       }
       return { success: true };

@@ -71,6 +71,8 @@ async function findBridgePath(): Promise<string | null> {
     path.resolve(cwd, "target/release/buddy-bridge"),
     path.resolve(cwd, "../target/debug/buddy-bridge"),
     path.resolve(cwd, "../target/release/buddy-bridge"),
+    path.resolve(cwd, "../../target/debug/buddy-bridge"),
+    path.resolve(cwd, "../../target/release/buddy-bridge"),
   ];
 
   for (const c of candidates) {

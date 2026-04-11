@@ -1,13 +1,46 @@
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
+use std::time::Duration;
 
 mod hook_input;
 
 use hook_input::ClaudeHookInput;
 
 const SOCKET_PATH: &str = ".buddy-notch/buddy.sock";
+const DANGEROUS_TOOLS: &[&str] = &["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"];
+
+/// Check if Claude Code is running in auto-approve mode by inspecting
+/// the process tree for --dangerously-skip-permissions.
+fn is_auto_approved() -> bool {
+    let mut pid = unsafe { libc::getppid() } as u32;
+    for _ in 0..5 {
+        if pid <= 1 {
+            break;
+        }
+        if let Ok(output) = std::process::Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "ppid=,args="])
+            .output()
+        {
+            let s = String::from_utf8_lossy(&output.stdout);
+            if s.contains("dangerously-skip") {
+                return true;
+            }
+            pid = s.trim().split_whitespace().next()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(0);
+        } else {
+            break;
+        }
+    }
+    false
+}
+
+#[derive(Deserialize)]
+struct ApprovalResponse {
+    action: String,
+}
 
 fn socket_path() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
@@ -53,22 +86,6 @@ fn main() {
 
     match cli.command {
         Commands::PreTool => {
-            // Send session start
-            let _ = send_message(&SocketMessage {
-                r#type: "sessionStart",
-                session_id: &session_id,
-                timestamp: &now_iso(),
-                payload: Payload::SessionStart {
-                    session_start: SessionStartPayload {
-                        task_name: None,
-                        working_directory: &cwd,
-                        terminal_app: detect_terminal(),
-                        terminal_pid: get_parent_pid(),
-                    },
-                },
-                session_mode,
-            });
-
             // Build diff preview
             let diff = hook.as_ref().and_then(|h| {
                 let ti = h.tool_input.as_ref()?;
@@ -82,8 +99,43 @@ fn main() {
             let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
             let file_path = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.file_path.as_deref());
             let command = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.command.as_deref());
+            // Extract question/options: direct fields or from AskUserQuestion's `questions` array
+            let (question_owned, options_owned) = hook
+                .as_ref()
+                .and_then(|h| {
+                    let ti = h.tool_input.as_ref()?;
+                    // Try direct fields first
+                    if ti.question.is_some() {
+                        return Some((ti.question.clone(), ti.options.clone()));
+                    }
+                    // AskUserQuestion uses `questions` array
+                    let qi = ti.questions.as_ref()?.first()?;
+                    let q = qi.question.clone();
+                    let opts = qi.options.as_ref().map(|os| {
+                        os.iter().filter_map(|o| o.label.clone()).collect()
+                    });
+                    Some((q, opts))
+                })
+                .unwrap_or((None, None));
+            let question = question_owned.as_deref();
+            let will_block = DANGEROUS_TOOLS.contains(&tool_name) && !is_auto_approved();
 
-            let _ = send_message(&SocketMessage {
+            let session_start = SocketMessage {
+                r#type: "sessionStart",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::SessionStart {
+                    session_start: SessionStartPayload {
+                        task_name: None,
+                        working_directory: &cwd,
+                        terminal_app: detect_terminal(),
+                        terminal_pid: get_parent_pid(),
+                    },
+                },
+                session_mode,
+            };
+
+            let pre_tool = SocketMessage {
                 r#type: "preToolUse",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -93,10 +145,30 @@ fn main() {
                         file_path,
                         input: command,
                         diff_preview: diff.as_deref(),
+                        question,
+                        options: options_owned.as_deref(),
+                        blocking: will_block,
                     },
                 },
                 session_mode,
-            });
+            };
+
+            if will_block {
+                // Blocking path: send both messages on one connection, wait for response
+                if let Some(resp) = send_and_wait(&session_start, &pre_tool) {
+                    if resp.action == "allow" {
+                        println!("{{\"decision\":\"allow\"}}");
+                    } else {
+                        println!("{{\"decision\":\"deny\",\"reason\":\"Denied via BuddyNotch\"}}");
+                    }
+                }
+                // If send_and_wait returns None (timeout/error), exit 0 with no output
+                // so Claude Code falls back to its own approval flow
+            } else {
+                // Fire-and-forget for safe tools and AskUserQuestion
+                let _ = send_message(&session_start);
+                let _ = send_message(&pre_tool);
+            }
         }
 
         Commands::PostTool => {
@@ -231,6 +303,34 @@ fn send_message(msg: &SocketMessage) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Send two messages on a single connection and block until a response is received.
+/// Returns None on connection failure, timeout, or parse error (graceful fallback).
+fn send_and_wait(msg1: &SocketMessage, msg2: &SocketMessage) -> Option<ApprovalResponse> {
+    let mut stream = UnixStream::connect(socket_path()).ok()?;
+    stream.set_read_timeout(Some(Duration::from_secs(120))).ok()?;
+
+    // Write both messages on the same connection
+    let json1 = serde_json::to_string(msg1).ok()?;
+    let json2 = serde_json::to_string(msg2).ok()?;
+    stream.write_all(json1.as_bytes()).ok()?;
+    stream.write_all(b"\n").ok()?;
+    stream.write_all(json2.as_bytes()).ok()?;
+    stream.write_all(b"\n").ok()?;
+    stream.flush().ok()?;
+
+    // Block reading until sidecar sends a response line
+    let reader = BufReader::new(&stream);
+    for line in reader.lines() {
+        let line = line.ok()?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        return serde_json::from_str(&line).ok();
+    }
+
+    None
+}
+
 // Wire types — must match sidecar/src/types.ts
 
 #[derive(Serialize)]
@@ -290,6 +390,12 @@ struct PreToolUsePayload<'a> {
     input: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     diff_preview: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    question: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    blocking: bool,
 }
 
 #[derive(Serialize)]

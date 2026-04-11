@@ -5,6 +5,9 @@ type RequestHandler = (method: string, params?: Record<string, unknown>) => Prom
 
 let handler: RequestHandler | null = null;
 
+// Prevent EPIPE crash when Tauri process exits before sidecar
+process.stdout.on("error", () => {});
+
 const rl = readline.createInterface({ input: process.stdin });
 
 rl.on("line", async (line) => {
@@ -31,5 +34,9 @@ export function emit(event: string, data: unknown) {
 }
 
 function send(msg: IpcResponse | IpcEvent) {
-  process.stdout.write(JSON.stringify(msg) + "\n");
+  try {
+    process.stdout.write(JSON.stringify(msg) + "\n");
+  } catch {
+    // Tauri process exited, ignore EPIPE
+  }
 }
