@@ -2,11 +2,16 @@ import { ContextScanner } from "./context-scanner.js";
 import { installHooksIfNeeded } from "./hook-installer.js";
 import { emit, onRequest } from "./ipc.js";
 import { ProcessScanner } from "./process-scanner.js";
+import { RepoFinder } from "./repo-finder.js";
 import { SessionManager } from "./session-manager.js";
 import { SocketServer } from "./socket-server.js";
 import { jumpToSession } from "./terminal-jumper.js";
+import { promptUserscriptInstall } from "./userscript-installer.js";
+import { WorktreeCreator } from "./worktree-creator.js";
 
 const sm = new SessionManager();
+const repoFinder = new RepoFinder();
+const worktreeCreator = new WorktreeCreator(repoFinder);
 const socketServer = new SocketServer((msg, clientFd) => {
   sm.handleMessage(msg, clientFd);
 });
@@ -61,16 +66,29 @@ onRequest(async (method, params) => {
       return { success: true };
     }
 
+    case "openWorktree": {
+      const result = await worktreeCreator.open({
+        owner: params?.owner as string,
+        repo: params?.repo as string,
+        branch: params?.branch as string,
+        headOwner: params?.headOwner as string,
+        headRepo: params?.headRepo as string,
+      });
+      return result;
+    }
+
     default:
       throw new Error(`Unknown method: ${method}`);
   }
 });
 
 // Startup
+repoFinder.scan().catch((e) => process.stderr.write(`[repo-finder] initial scan error: ${e}\n`));
 socketServer.start();
 processScanner.start();
 contextScanner.start();
 installHooksIfNeeded().catch((e) => process.stderr.write(`[hookInstaller] error: ${e}\n`));
+promptUserscriptInstall();
 
 // Heartbeat
 setInterval(() => {
