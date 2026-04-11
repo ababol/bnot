@@ -20,6 +20,7 @@ export class ContextScanner {
   private sm: SessionManager;
   private exactCounts: Record<string, { used: number; max: number; model: string }> = {};
   private cachedTitles: Record<string, string> = {};
+  private namedSessions = new Set<string>();
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -93,6 +94,15 @@ export class ContextScanner {
 
         if (sessionName) {
           this.sm.sessions[targetId].sessionName = sessionName;
+        } else if (!this.namedSessions.has(sessionId)) {
+          const autoName = await this.autoNameSession(
+            path.join(sessionsDir, file),
+            jsonlPath,
+          );
+          if (autoName) {
+            this.sm.sessions[targetId].sessionName = autoName;
+            this.namedSessions.add(sessionId);
+          }
         }
         if (info.title) {
           this.sm.sessions[targetId].taskName = info.title;
@@ -210,6 +220,79 @@ export class ContextScanner {
         const repo = cwd.split("/").pop() ?? "";
         return repo ? `${repo}/${branch}` : branch;
       }
+    }
+
+    return undefined;
+  }
+
+  private async autoNameSession(metaPath: string, jsonlPath: string): Promise<string | undefined> {
+    const STOP_WORDS = new Set([
+      "i", "want", "to", "a", "the", "can", "you", "please", "me", "help",
+      "with", "this", "my", "for", "in", "on", "is", "it", "do", "an",
+      "of", "and", "that", "be", "have", "we", "need", "would", "like",
+    ]);
+
+    let text: string;
+    try {
+      const handle = await fs.open(jsonlPath, "r");
+      const buf = Buffer.alloc(8192);
+      const { bytesRead } = await handle.read(buf, 0, 8192, 0);
+      await handle.close();
+      text = buf.toString("utf-8", 0, bytesRead);
+    } catch {
+      return undefined;
+    }
+
+    const lines = text.split("\n");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let obj;
+      try {
+        obj = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      const msg = obj.message ?? obj;
+      if (msg.role !== "user") continue;
+
+      let content = "";
+      if (typeof msg.content === "string") {
+        content = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        content = msg.content
+          .filter((c: { type: string }) => c.type === "text")
+          .map((c: { text: string }) => c.text)
+          .join(" ");
+      }
+      if (!content) continue;
+
+      const words = content
+        .replace(/[^a-zA-Z0-9\s]/g, " ")
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.length > 0)
+        .map((w) => w.toLowerCase());
+
+      const meaningful = words.filter((w) => !STOP_WORDS.has(w));
+      const slug = (meaningful.length >= 2 ? meaningful : words)
+        .slice(0, 5)
+        .join("-")
+        .slice(0, 50);
+
+      if (!slug) continue;
+
+      // Write name to session metadata so Claude Code picks it up too
+      try {
+        const data = await fs.readFile(metaPath, "utf-8");
+        const meta = JSON.parse(data);
+        meta.name = slug;
+        await fs.writeFile(metaPath, JSON.stringify(meta));
+      } catch {
+        // still return the name for display even if write fails
+      }
+
+      return slug;
     }
 
     return undefined;
