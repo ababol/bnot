@@ -78,7 +78,7 @@ export function buddyTraitsFromId(id: string, branch?: string): BuddyTraits {
   const h = djb2(id);
   return {
     color: BUDDY_COLORS[h % BUDDY_COLORS.length],
-    hat: (branch && hatFromKeywords(branch)) ?? HATS[(h >> 4) % HATS.length],
+    hat: (branch ? hatFromKeywords(branch) : null) ?? HATS[(h >> 4) % HATS.length],
     ears: EARS[(h >> 8) % EARS.length],
     eyes: EYES[(h >> 12) % EYES.length],
   };
