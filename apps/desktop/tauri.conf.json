@@ -32,12 +32,20 @@
       "csp": null
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["buddynotch"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
     "resources": {
       "../../packages/sidecar/dist/index.mjs": "sidecar/index.mjs",
-      "../../target/release/buddy-bridge": "bin/buddy-bridge"
+      "../../target/release/buddy-bridge": "bin/buddy-bridge",
+      "../../packages/userscript/buddynotch-worktree.user.js": "userscript/buddynotch-worktree.user.js"
     },
     "icon": [
       "icons/32x32.png",

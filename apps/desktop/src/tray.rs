@@ -8,9 +8,14 @@ use tauri::{
 pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) {
     let quit = MenuItemBuilder::with_id("quit", "Quit BuddyNotch").build(app).unwrap();
     let show = MenuItemBuilder::with_id("show", "Show Panel").build(app).unwrap();
+    let settings = MenuItemBuilder::with_id("settings", "Settings...").build(app).unwrap();
+    let userscript =
+        MenuItemBuilder::with_id("install_userscript", "Install Userscript...").build(app).unwrap();
 
     let menu = MenuBuilder::new(app)
         .item(&show)
+        .item(&userscript)
+        .item(&settings)
         .separator()
         .item(&quit)
         .build()
@@ -32,10 +37,55 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) {
                     let _ = win.show();
                 }
             }
+            "install_userscript" => {
+                // Find the userscript: bundled in Resources (release) or source (dev)
+                let userscript_path = find_userscript();
+                if let Some(path) = userscript_path {
+                    // Opening a .user.js in the browser triggers Tampermonkey's install prompt
+                    let _ = std::process::Command::new("open").arg(&path).spawn();
+                } else {
+                    eprintln!("[tray] userscript not found");
+                }
+            }
+            "settings" => {
+                let home = std::env::var("HOME").unwrap_or_default();
+                let config_path = format!("{home}/.buddy-notch/config.json");
+                let _ = std::process::Command::new("open")
+                    .arg("-e")
+                    .arg(&config_path)
+                    .spawn();
+            }
             _ => {}
         })
         .build(app)
         .unwrap();
+}
+
+/// Find the bundled userscript (release: in Resources, dev: in source tree)
+fn find_userscript() -> Option<String> {
+    // Release: inside app bundle Resources/
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(resources) = exe.parent().and_then(|p| p.parent()) {
+            let bundled = resources.join("Resources/userscript/buddynotch-worktree.user.js");
+            if bundled.exists() {
+                return Some(bundled.to_string_lossy().into_owned());
+            }
+        }
+    }
+
+    // Dev: relative to cwd
+    let cwd = std::env::current_dir().ok()?;
+    let candidates = [
+        cwd.join("packages/userscript/buddynotch-worktree.user.js"),
+        cwd.join("../../packages/userscript/buddynotch-worktree.user.js"),
+    ];
+    for c in &candidates {
+        if c.exists() {
+            return Some(c.to_string_lossy().into_owned());
+        }
+    }
+
+    None
 }
 
 /// Create a simple 16x16 RGBA icon (green square)
