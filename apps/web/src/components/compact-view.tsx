@@ -27,7 +27,7 @@ export default function CompactView({ notchWidth }: Props) {
   const barColor: BuddyColor = heroPct > 0.85 ? "red" : heroPct > 0.6 ? "orange" : "green";
   const heroSuffix = heroSession ? (heroSession.gitWorktree ?? heroSession.gitBranch ?? "") : "";
   const heroTraits = heroSession
-    ? buddyTraitsFromId(heroSession.workingDirectory + heroSuffix)
+    ? buddyTraitsFromId(heroSession.workingDirectory + heroSuffix, heroSuffix || undefined)
     : undefined;
   const heroIsWorking = heroSession ? heroSession.status === "active" && heroSession.cpuPercent >= 2.0 : false;
   const heroColor: BuddyColor = heroSession
@@ -54,7 +54,7 @@ export default function CompactView({ notchWidth }: Props) {
           <span className="text-base text-buddy-green">&#x2713;</span>
         ) : (
           <div className="flex items-center gap-1">
-            <PixelBuddy color={heroColor} isActive={heroIsWorking} traits={heroTraits} />
+            <PixelBuddy color={heroColor} identityColor={heroTraits?.color} isActive={heroIsWorking} traits={heroTraits} />
             {heroSession && (
               <div className="relative h-[14px] w-[4px] overflow-hidden rounded-sm bg-white/10">
                 <div

@@ -19,4 +19,4 @@ apps/desktop/gen/
 packages/sidecar/dist/
 
 # LLMs
-.claude/.worktrees/
+.claude/.worktrees
