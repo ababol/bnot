@@ -59,7 +59,7 @@ end tell`;
   }
 }
 
-async function detectRunningTerminal(): Promise<string> {
+export async function detectRunningTerminal(): Promise<string> {
   try {
     const { stdout } = await exec("/bin/ps", ["-eo", "comm"]);
     if (stdout.includes("ghostty")) return "ghostty";
