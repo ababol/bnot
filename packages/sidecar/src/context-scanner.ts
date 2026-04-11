@@ -54,7 +54,7 @@ export class ContextScanner {
       try {
         const data = await fs.readFile(path.join(sessionsDir, file), "utf-8");
         const meta = JSON.parse(data);
-        const { pid, sessionId, cwd } = meta;
+        const { pid, sessionId, cwd, name: sessionName } = meta;
         if (!pid || !sessionId || !cwd) continue;
 
         // Check if process is still alive
@@ -91,6 +91,9 @@ export class ContextScanner {
         this.sm.sessions[targetId].modelName = info.model;
         this.sm.sessions[targetId].sessionFilePath = jsonlPath;
 
+        if (sessionName) {
+          this.sm.sessions[targetId].sessionName = sessionName;
+        }
         if (info.title) {
           this.sm.sessions[targetId].taskName = info.title;
         }

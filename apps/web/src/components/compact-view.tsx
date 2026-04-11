@@ -5,6 +5,12 @@ import type { BuddyColor } from "../lib/colors";
 import { buddyTraitsFromId, MAIN_COLORS } from "../lib/colors";
 import PixelBuddy from "./pixel-buddy";
 
+const MODE_DOT_COLOR: Record<string, string> = {
+  plan: "bg-buddy-cyan",
+  auto: "bg-buddy-yellow",
+  dangerous: "bg-buddy-red",
+};
+
 interface Props {
   notchWidth: number;
 }
@@ -59,6 +65,9 @@ export default function CompactView({ notchWidth }: Props) {
                   }}
                 />
               </div>
+            )}
+            {heroSession?.sessionMode && MODE_DOT_COLOR[heroSession.sessionMode] && (
+              <div className={`h-[5px] w-[5px] rounded-full ${MODE_DOT_COLOR[heroSession.sessionMode]}`} />
             )}
           </div>
         )}
