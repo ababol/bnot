@@ -103,6 +103,18 @@ export interface AgentSession {
   gitRepoName?: string;
 }
 
+// History session from ~/.claude/projects/*/sessions-index.json
+export interface HistorySession {
+  sessionId: string;
+  projectPath: string;
+  summary: string;
+  firstPrompt: string;
+  messageCount: number;
+  gitBranch?: string;
+  created: string;
+  modified: string;
+}
+
 // IPC protocol between Tauri and sidecar
 export interface IpcRequest {
   id: number;

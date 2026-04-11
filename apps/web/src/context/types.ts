@@ -42,6 +42,18 @@ export interface AgentSession {
   gitRepoName?: string;
 }
 
+// History session for resume after restart
+export interface HistorySession {
+  sessionId: string;
+  projectPath: string;
+  summary: string;
+  firstPrompt: string;
+  messageCount: number;
+  gitBranch?: string;
+  created: string;
+  modified: string;
+}
+
 // Derived helpers
 export function contextPercent(s: AgentSession): number {
   if (s.maxContextTokens <= 0) return 0;

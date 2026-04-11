@@ -53,3 +53,12 @@ pub fn jump_to_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
         serde_json::json!({ "sessionId": session_id }),
     );
 }
+
+#[command]
+pub fn resume_session<R: Runtime>(app: AppHandle<R>, session_id: String, project_path: String) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request(
+        "resumeSession",
+        serde_json::json!({ "sessionId": session_id, "projectPath": project_path }),
+    );
+}
