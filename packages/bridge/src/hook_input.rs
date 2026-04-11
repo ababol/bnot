@@ -30,6 +30,18 @@ pub struct ToolInput {
     pub new_string: Option<String>,
     pub question: Option<String>,
     pub options: Option<Vec<String>>,
+    pub questions: Option<Vec<QuestionItem>>,
+}
+
+#[derive(Deserialize)]
+pub struct QuestionItem {
+    pub question: Option<String>,
+    pub options: Option<Vec<OptionItem>>,
+}
+
+#[derive(Deserialize)]
+pub struct OptionItem {
+    pub label: Option<String>,
 }
 
 #[derive(Deserialize)]

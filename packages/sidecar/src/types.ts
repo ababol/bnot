@@ -33,6 +33,7 @@ export interface PreToolUsePayload {
   diffPreview?: string;
   question?: string;
   options?: string[];
+  blocking?: boolean;
 }
 
 export interface PostToolUsePayload {

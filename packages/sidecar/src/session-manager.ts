@@ -69,7 +69,7 @@ export class SessionManager {
           };
           this.heroSessionId = sessionId;
           emit("panelStateChange", { state: "ask", sessionId });
-        } else if (DANGEROUS_TOOLS.has(p.toolName)) {
+        } else if (DANGEROUS_TOOLS.has(p.toolName) && p.blocking) {
           this.sessions[sessionId].status = "waitingApproval";
           this.sessions[sessionId].pendingApproval = {
             toolName: p.toolName,

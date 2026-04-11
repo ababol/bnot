@@ -11,6 +11,32 @@ use hook_input::ClaudeHookInput;
 const SOCKET_PATH: &str = ".buddy-notch/buddy.sock";
 const DANGEROUS_TOOLS: &[&str] = &["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"];
 
+/// Check if Claude Code is running in auto-approve mode by inspecting
+/// the process tree for --dangerously-skip-permissions.
+fn is_auto_approved() -> bool {
+    let mut pid = unsafe { libc::getppid() } as u32;
+    for _ in 0..5 {
+        if pid <= 1 {
+            break;
+        }
+        if let Ok(output) = std::process::Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "ppid=,args="])
+            .output()
+        {
+            let s = String::from_utf8_lossy(&output.stdout);
+            if s.contains("dangerously-skip") {
+                return true;
+            }
+            pid = s.trim().split_whitespace().next()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(0);
+        } else {
+            break;
+        }
+    }
+    false
+}
+
 #[derive(Deserialize)]
 struct ApprovalResponse {
     action: String,
@@ -67,8 +93,26 @@ fn main() {
             let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
             let file_path = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.file_path.as_deref());
             let command = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.command.as_deref());
-            let question = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.question.as_deref());
-            let options_owned = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.options.clone());
+            // Extract question/options: direct fields or from AskUserQuestion's `questions` array
+            let (question_owned, options_owned) = hook
+                .as_ref()
+                .and_then(|h| {
+                    let ti = h.tool_input.as_ref()?;
+                    // Try direct fields first
+                    if ti.question.is_some() {
+                        return Some((ti.question.clone(), ti.options.clone()));
+                    }
+                    // AskUserQuestion uses `questions` array
+                    let qi = ti.questions.as_ref()?.first()?;
+                    let q = qi.question.clone();
+                    let opts = qi.options.as_ref().map(|os| {
+                        os.iter().filter_map(|o| o.label.clone()).collect()
+                    });
+                    Some((q, opts))
+                })
+                .unwrap_or((None, None));
+            let question = question_owned.as_deref();
+            let will_block = DANGEROUS_TOOLS.contains(&tool_name) && !is_auto_approved();
 
             let session_start = SocketMessage {
                 r#type: "sessionStart",
@@ -96,11 +140,12 @@ fn main() {
                         diff_preview: diff.as_deref(),
                         question,
                         options: options_owned.as_deref(),
+                        blocking: will_block,
                     },
                 },
             };
 
-            if DANGEROUS_TOOLS.contains(&tool_name) {
+            if will_block {
                 // Blocking path: send both messages on one connection, wait for response
                 if let Some(resp) = send_and_wait(&session_start, &pre_tool) {
                     if resp.action == "allow" {
@@ -335,6 +380,8 @@ struct PreToolUsePayload<'a> {
     question: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    blocking: bool,
 }
 
 #[derive(Serialize)]

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 
 pub struct SidecarManager {
     child: Arc<Mutex<Option<Child>>>,
@@ -96,22 +96,6 @@ impl SidecarManager {
                         // Handle tauriCommand events locally (keyboard injection, app activation)
                         if event_name == "tauriCommand" {
                             handle_tauri_command(&data);
-                        } else if event_name == "panelStateChange" {
-                            // Animate the window AND forward to frontend
-                            if let Some(state_str) = data.get("state").and_then(|v| v.as_str()) {
-                                if let Some(win) = app_handle.get_webview_window("main") {
-                                    if let Some(geom) = crate::notch::get_notch_geometry() {
-                                        let (x, y, w, h) =
-                                            crate::window::expanded_frame(state_str, &geom);
-                                        crate::window::animate_frame(&win, x, y, w, h);
-                                        crate::window::show_without_activation(&win);
-                                        if state_str != "compact" {
-                                            crate::window::make_key_window(&win);
-                                        }
-                                    }
-                                }
-                            }
-                            let _ = app_handle.emit(event_name, data);
                         } else {
                             let _ = app_handle.emit(event_name, data);
                         }

@@ -73,11 +73,11 @@ export default function ApprovalView({ notchHeight }: Props) {
 
       {/* Diff preview or command */}
       {approval.diffPreview ? (
-        <div className="max-h-[200px] flex-1 overflow-auto rounded-lg bg-surface">
+        <div className="max-h-[120px] overflow-auto rounded-lg bg-surface">
           <DiffView diff={approval.diffPreview} />
         </div>
       ) : approval.input ? (
-        <div className="max-h-[120px] flex-1 overflow-auto rounded-lg bg-surface p-2.5 font-mono text-[11px] text-buddy-green">
+        <div className="max-h-[80px] overflow-hidden rounded-lg bg-surface p-2.5 font-mono text-[11px] text-buddy-green">
           {approval.input}
         </div>
       ) : null}

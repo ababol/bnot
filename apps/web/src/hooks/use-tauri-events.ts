@@ -34,6 +34,7 @@ export function useTauriEvents(
     listen<{ state: string }>("panelStateChange", (event) => {
       const state = event.payload.state as "compact" | "overview" | "approval" | "ask" | "jump";
       dispatch({ type: "SET_PANEL_STATE", panelState: state });
+      invoke("set_panel_state", { state });
     }).then((u) => unlisten.push(u));
 
     return () => {

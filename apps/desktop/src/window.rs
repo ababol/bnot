@@ -18,7 +18,7 @@ pub fn expanded_frame(state: &str, geom: &NotchGeometry) -> (f64, f64, f64, f64)
             return (x, 0.0, w, h);
         }
         "overview" => (geom.notch_width + 220.0, 300.0),
-        "approval" => (geom.notch_width + 220.0, 420.0),
+        "approval" => (geom.notch_width + 220.0, 280.0),
         "ask" => (geom.notch_width + 220.0, 340.0),
         _ => {
             let (x, w, h) = compact_frame(geom);
