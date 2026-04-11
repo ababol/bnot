@@ -8,7 +8,7 @@ interface Props {
   isActive: boolean;
 }
 
-export default function BuddyBattery({ color: _color, percent, isActive }: Props) {
+export default function ContextGauge({ color: _color, percent, isActive }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [frame, setFrame] = useState(0);
 
