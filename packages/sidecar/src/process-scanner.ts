@@ -162,12 +162,11 @@ export class ProcessScanner {
         ([k, v]) => !k.startsWith("proc-") && v.workingDirectory === (info.cwd ?? ""),
       );
       if (match) {
-        const hadTty = !!match[1].tty;
         match[1].tty = info.tty ?? undefined;
         match[1].processPid = info.pid;
         match[1].cpuPercent = info.cpuPercent;
-        // Trigger auto-color injection when TTY is first assigned (skip first scan)
-        if (this.firstScanDone && !hadTty && match[1].tty) {
+        // Inject color for hook-based sessions once they get a TTY
+        if (this.firstScanDone && match[1].tty && !this.sm.coloredSessions.has(match[0])) {
           this.sm.tryInjectColor(match[1]);
         }
       }

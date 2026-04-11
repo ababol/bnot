@@ -3,7 +3,7 @@ import { contextPercent, isWorking } from "../context/types";
 import { useHeroSession } from "../hooks/use-hero-session";
 import { useTimer } from "../hooks/use-timer";
 import type { BuddyColor } from "../lib/colors";
-import { buddyTraitsFromId, MAIN_COLORS, parseBuddyColor, sessionStatusDot } from "../lib/colors";
+import { buddyTraitsFromId, BUDDY_COLORS_RGB, parseBuddyColor, sessionStatusDot } from "../lib/colors";
 import { setPanelState } from "../lib/tauri";
 import PixelBuddy from "./pixel-buddy";
 
@@ -60,7 +60,7 @@ export default function CompactView({ notchWidth }: Props) {
                   className="absolute bottom-0 w-full rounded-sm"
                   style={{
                     height: `${Math.max(Math.min(heroPct, 1) * 100, 10)}%`,
-                    backgroundColor: MAIN_COLORS[barColor],
+                    backgroundColor: BUDDY_COLORS_RGB[barColor],
                   }}
                 />
               </div>

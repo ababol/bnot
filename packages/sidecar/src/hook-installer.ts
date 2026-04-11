@@ -20,27 +20,45 @@ export async function installHooksIfNeeded(bridgePath?: string) {
     return;
   }
 
-  // Check if already installed
+  // Check if already installed and up to date
   const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>;
-  const preToolUse = hooks.PreToolUse as Array<{ hooks?: Array<{ command?: string }> }> | undefined;
-  if (preToolUse?.some((entry) => entry.hooks?.some((h) => h.command?.includes("buddy-bridge")))) {
-    process.stderr.write("[hookInstaller] hooks already installed\n");
+  const preToolUse = hooks.PreToolUse as
+    | Array<{ hooks?: Array<{ command?: string; timeout?: number }> }>
+    | undefined;
+  const existingEntry = preToolUse?.find((entry) =>
+    entry.hooks?.some((h) => h.command?.includes("buddy-bridge")),
+  );
+
+  if (existingEntry) {
+    // Remove stale timeout from older blocking-mode hooks
+    const bridgeHook = existingEntry.hooks?.find((h) => h.command?.includes("buddy-bridge"));
+    if (bridgeHook && bridgeHook.timeout) {
+      delete bridgeHook.timeout;
+      try {
+        await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+        process.stderr.write("[hookInstaller] removed stale hook timeout\n");
+      } catch {
+        // ignore
+      }
+    } else {
+      process.stderr.write("[hookInstaller] hooks already installed\n");
+    }
     return;
   }
 
   // Install hooks for each event
   const newHooks: Record<string, unknown[]> = { ...hooks };
 
-  function addHook(event: string, subcommand: string) {
+  function addHook(event: string, subcommand: string, timeout?: number) {
     const entries = (newHooks[event] ?? []) as unknown[];
+    const hookEntry: Record<string, unknown> = {
+      type: "command",
+      command: `${bridge} ${subcommand}`,
+    };
+    if (timeout) hookEntry.timeout = timeout;
     entries.push({
       matcher: "",
-      hooks: [
-        {
-          type: "command",
-          command: `${bridge} ${subcommand}`,
-        },
-      ],
+      hooks: [hookEntry],
     });
     newHooks[event] = entries;
   }

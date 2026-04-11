@@ -26,6 +26,7 @@ export class SessionManager {
   heroSessionId: string | null = null;
   pendingApprovalClients: Record<string, number> = {};
   coloredSessions = new Set<string>();
+  private coloredTtys = new Set<string>();
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -88,7 +89,7 @@ export class SessionManager {
           };
           this.heroSessionId = sessionId;
           emit("panelStateChange", { state: "ask", sessionId });
-        } else if (DANGEROUS_TOOLS.has(p.toolName) && p.blocking) {
+        } else if (DANGEROUS_TOOLS.has(p.toolName)) {
           this.sessions[sessionId].status = "waitingApproval";
           this.sessions[sessionId].pendingApproval = {
             toolName: p.toolName,
@@ -197,6 +198,12 @@ export class SessionManager {
    */
   tryInjectColor(session: AgentSession) {
     if (this.coloredSessions.has(session.id)) return;
+    // Multiple claude processes (parent + subagents) share the same TTY.
+    // Only inject once per terminal to avoid typing /color multiple times.
+    if (session.tty && this.coloredTtys.has(session.tty)) {
+      this.coloredSessions.add(session.id);
+      return;
+    }
     this._doInjectColor(session);
   }
 
@@ -208,6 +215,7 @@ export class SessionManager {
     const color = hashColor(session.workingDirectory + session.id);
     session.agentColor = color;
     this.coloredSessions.add(session.id);
+    if (tty) this.coloredTtys.add(tty);
 
     try {
       // Write OSC title marker to identify the right tab

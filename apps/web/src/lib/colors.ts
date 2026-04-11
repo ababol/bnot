@@ -1,45 +1,26 @@
+// Agent colors — matches Claude Code's dark theme palette
 export type BuddyColor =
-  | "green"
-  | "blue"
-  | "orange"
-  | "cyan"
-  | "gray"
   | "red"
-  | "purple"
-  | "pink"
+  | "blue"
+  | "green"
   | "yellow"
-  | "lime"
-  | "white"
-  | "lavender";
+  | "purple"
+  | "orange"
+  | "pink"
+  | "cyan"
+  | "gray";
 
-export const MAIN_COLORS: Record<BuddyColor, string> = {
-  green: "rgb(74, 222, 128)",
-  blue: "rgb(97, 166, 250)",
-  orange: "rgb(250, 173, 87)",
-  cyan: "rgb(97, 212, 222)",
+// Claude Code daltonism-friendly dark theme values
+export const BUDDY_COLORS_RGB: Record<BuddyColor, string> = {
+  red: "rgb(255, 102, 102)",
+  blue: "rgb(102, 178, 255)",
+  green: "rgb(102, 255, 102)",
+  yellow: "rgb(255, 255, 102)",
+  purple: "rgb(178, 102, 255)",
+  orange: "rgb(255, 178, 102)",
+  pink: "rgb(255, 153, 204)",
+  cyan: "rgb(102, 204, 204)",
   gray: "rgb(120, 120, 130)",
-  red: "rgb(250, 87, 87)",
-  purple: "rgb(180, 130, 255)",
-  pink: "rgb(255, 130, 180)",
-  yellow: "rgb(250, 230, 90)",
-  lime: "rgb(170, 240, 80)",
-  white: "rgb(220, 225, 235)",
-  lavender: "rgb(160, 170, 255)",
-};
-
-export const BRIGHT_COLORS: Record<BuddyColor, string> = {
-  green: "rgb(128, 255, 166)",
-  blue: "rgb(140, 204, 255)",
-  orange: "rgb(255, 217, 128)",
-  cyan: "rgb(140, 255, 255)",
-  gray: "rgb(160, 160, 170)",
-  red: "rgb(255, 140, 140)",
-  purple: "rgb(210, 170, 255)",
-  pink: "rgb(255, 175, 210)",
-  yellow: "rgb(255, 245, 150)",
-  lime: "rgb(200, 255, 130)",
-  white: "rgb(245, 248, 255)",
-  lavender: "rgb(195, 200, 255)",
 };
 
 // --- Unique buddy traits ---
@@ -58,17 +39,17 @@ export interface BuddyTraits {
 const HATS: BuddyHat[] = ["none", "cap", "horn", "crown"];
 const EARS: BuddyEars[] = ["both", "left", "right", "floppy"];
 const EYES: BuddyEyes[] = ["normal", "winkLeft", "winkRight"];
+
+// Must match Claude Code's AGENT_COLORS
 const BUDDY_COLORS: BuddyColor[] = [
-  "green",
+  "red",
   "blue",
-  "orange",
-  "cyan",
-  "purple",
-  "pink",
+  "green",
   "yellow",
-  "lime",
-  "white",
-  "lavender",
+  "purple",
+  "orange",
+  "pink",
+  "cyan",
 ];
 
 function djb2(s: string): number {
@@ -102,20 +83,7 @@ export function buddyTraitsFromId(id: string, branch?: string): BuddyTraits {
   };
 }
 
-const BUDDY_COLOR_SET = new Set<string>([
-  "green",
-  "blue",
-  "orange",
-  "cyan",
-  "gray",
-  "red",
-  "purple",
-  "pink",
-  "yellow",
-  "lime",
-  "white",
-  "lavender",
-]);
+const BUDDY_COLOR_SET = new Set<string>(Object.keys(BUDDY_COLORS_RGB));
 
 export function parseBuddyColor(value: string | undefined): BuddyColor | undefined {
   if (value && BUDDY_COLOR_SET.has(value)) return value as BuddyColor;
@@ -127,9 +95,9 @@ export function parseBuddyColor(value: string | undefined): BuddyColor | undefin
 export type StatusDot = "working" | "planning" | "waiting" | "idle";
 
 export const STATUS_DOT_COLORS: Record<StatusDot, string> = {
-  working: "rgb(74, 222, 128)", // green
-  planning: "rgb(97, 212, 222)", // cyan
-  waiting: "rgb(250, 230, 90)", // yellow
+  working: "rgb(102, 255, 102)", // green
+  planning: "rgb(102, 204, 204)", // cyan
+  waiting: "rgb(255, 255, 102)", // yellow
   idle: "rgb(120, 120, 130)", // gray
 };
 
@@ -146,9 +114,9 @@ export function sessionStatusDot(
 
 /** Buddy body color based on context fill percent: green -> yellow -> red */
 export function contextColor(percent: number): string {
-  if (percent > 0.85) return "rgb(255, 51, 51)"; // red: <15% remaining
-  if (percent > 0.6) return "rgb(255, 191, 26)"; // yellow: >60% used
-  return "rgb(74, 222, 128)"; // green: plenty of space
+  if (percent > 0.85) return "rgb(255, 102, 102)"; // red
+  if (percent > 0.6) return "rgb(255, 255, 102)"; // yellow
+  return "rgb(102, 255, 102)"; // green
 }
 
 export function buddyColorFromSessions(sessions: Record<string, { status: string }>): BuddyColor {
@@ -157,4 +125,12 @@ export function buddyColorFromSessions(sessions: Record<string, { status: string
   if (vals.some((s) => s.status === "waitingAnswer")) return "cyan";
   if (vals.some((s) => s.status === "active")) return "blue";
   return "green";
+}
+
+/** Lighten a color by blending toward white */
+export function lighten(rgb: string, amount = 0.4): string {
+  const m = rgb.match(/(\d+)/g);
+  if (!m || m.length < 3) return rgb;
+  const [r, g, b] = m.map(Number);
+  return `rgb(${Math.round(r + (255 - r) * amount)}, ${Math.round(g + (255 - g) * amount)}, ${Math.round(b + (255 - b) * amount)})`;
 }

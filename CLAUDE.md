@@ -29,7 +29,7 @@ buddynotch/
       src/              # index.ts, process-scanner.ts, context-scanner.ts, session-manager.ts,
                         # paths.ts, terminal-utils.ts, terminal-jumper.ts, ghostty-tab-mapper.ts,
                         # socket-server.ts, hook-installer.ts, history-scanner.ts, repo-finder.ts,
-                        # worktree-creator.ts, session-launcher.ts, userscript-installer.ts, ipc.ts, types.ts
+                        # worktree-creator.ts, session-launcher.ts, ipc.ts, types.ts
     bridge/             # Rust CLI binary (Claude Code hook handler)
       src/              # main.rs, hook_input.rs
 ```

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { BuddyColor } from "../lib/colors";
-import { MAIN_COLORS } from "../lib/colors";
+import { BUDDY_COLORS_RGB } from "../lib/colors";
 
 interface Props {
   percent: number;
@@ -54,5 +54,5 @@ export default function PixelProgressBar({ percent, color, blockCount = 12 }: Pr
 function blockColor(intensity: number, color: BuddyColor): string {
   if (intensity > 0.85) return "rgb(255, 77, 51)";
   if (intensity > 0.7) return "rgb(255, 179, 51)";
-  return MAIN_COLORS[color];
+  return BUDDY_COLORS_RGB[color];
 }
