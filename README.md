@@ -1,6 +1,6 @@
 # BuddyNotch
 
-A macOS app that turns your MacBook's notch into a real-time control surface for AI coding agents. Monitors Claude Code sessions, shows context window usage, and lets you jump to the exact terminal tab and pane.
+A macOS app that turns your MacBook's notch into a real-time control surface for AI coding agents. Monitors Claude Code sessions, shows context window usage, and lets you jump to the exact terminal tab and pane.dd
 
 Inspired by [vibeisland.app](https://vibeisland.app/).
 
