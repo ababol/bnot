@@ -28,6 +28,8 @@ pub struct ToolInput {
     pub old_string: Option<String>,
     #[serde(rename = "new_string")]
     pub new_string: Option<String>,
+    pub question: Option<String>,
+    pub options: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]

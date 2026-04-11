@@ -40,7 +40,10 @@ export default function AskView({ notchHeight }: Props) {
       {question.options.map((option, i) => (
         <button
           key={i}
-          onClick={close}
+          onClick={() => {
+            if (session) invoke("jump_to_session", { sessionId: session.id });
+            close();
+          }}
           className="mb-1.5 flex w-full cursor-pointer items-center gap-2 rounded-lg border-none bg-surface px-2.5 py-2 text-left text-xs text-white hover:bg-surface-hover"
         >
           <span className="w-7 shrink-0 font-mono text-[10px] font-bold text-buddy-cyan/60">

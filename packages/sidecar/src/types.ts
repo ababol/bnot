@@ -31,6 +31,8 @@ export interface PreToolUsePayload {
   filePath?: string;
   input?: string;
   diffPreview?: string;
+  question?: string;
+  options?: string[];
 }
 
 export interface PostToolUsePayload {

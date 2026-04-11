@@ -53,3 +53,21 @@ pub fn jump_to_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
         serde_json::json!({ "sessionId": session_id }),
     );
 }
+
+#[command]
+pub fn approve_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request(
+        "approveSession",
+        serde_json::json!({ "sessionId": session_id }),
+    );
+}
+
+#[command]
+pub fn deny_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request(
+        "denySession",
+        serde_json::json!({ "sessionId": session_id }),
+    );
+}

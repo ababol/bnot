@@ -20,7 +20,12 @@ export default function ApprovalView({ notchHeight }: Props) {
   };
 
   const approve = () => {
-    if (session) invoke("jump_to_session", { sessionId: session.id });
+    if (session) invoke("approve_session", { sessionId: session.id });
+    close();
+  };
+
+  const deny = () => {
+    if (session) invoke("deny_session", { sessionId: session.id });
     close();
   };
 
@@ -93,7 +98,7 @@ export default function ApprovalView({ notchHeight }: Props) {
       {/* Action buttons */}
       <div className="flex gap-2.5">
         <button
-          onClick={close}
+          onClick={deny}
           className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border-none bg-surface-hover py-2.5 text-[13px] font-medium text-white hover:bg-surface-active"
         >
           Deny <span className="font-mono text-[11px] text-text-dim">{"\u2318"}N</span>

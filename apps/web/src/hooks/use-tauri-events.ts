@@ -43,7 +43,7 @@ export function useTauriEvents(
 
   // Collapse panel when window loses focus (user clicks outside)
   useEffect(() => {
-    if (panelState === "compact" || panelState === "jump") return;
+    if (panelState === "compact" || panelState === "jump" || panelState === "approval" || panelState === "ask") return;
 
     const win = getCurrentWebviewWindow();
     let unlisten: (() => void) | null = null;
