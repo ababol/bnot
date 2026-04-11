@@ -12,6 +12,7 @@ interface SessionInfo {
   model?: string;
   estimatedContext: number;
   title?: string;
+  agentColor?: string;
 }
 
 export class ContextScanner {
@@ -21,6 +22,7 @@ export class ContextScanner {
   private exactCounts: Record<string, { used: number; max: number; model: string }> = {};
   private cachedTitles: Record<string, string> = {};
   private namedSessions = new Set<string>();
+  private coloredSessions = new Set<string>();
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -107,6 +109,28 @@ export class ContextScanner {
         if (info.title) {
           this.sm.sessions[targetId].taskName = info.title;
         }
+        if (info.agentColor) {
+          this.sm.sessions[targetId].agentColor = info.agentColor;
+        } else if (!this.coloredSessions.has(sessionId)) {
+          // Auto-set color to match buddy's identity color
+          const suffix = this.sm.sessions[targetId].gitWorktree
+            ?? this.sm.sessions[targetId].gitBranch ?? "";
+          const buddyColor = hashToClaudeColor(
+            this.sm.sessions[targetId].workingDirectory + suffix,
+          );
+          try {
+            const entry = JSON.stringify({
+              type: "agent-color",
+              agentColor: buddyColor,
+              sessionId,
+            });
+            await fs.appendFile(jsonlPath, entry + "\n");
+            this.sm.sessions[targetId].agentColor = buddyColor;
+            this.coloredSessions.add(sessionId);
+          } catch {
+            // write failed, try again next scan
+          }
+        }
 
         // Use exact count if available, otherwise estimation
         const exact = this.exactCounts[sessionId];
@@ -160,6 +184,11 @@ export class ContextScanner {
         continue;
       }
 
+      // Detect /color setting
+      if (!info.agentColor && obj.type === "agent-color" && obj.agentColor) {
+        info.agentColor = obj.agentColor;
+      }
+
       const msg = obj.message;
       if (!info.model && msg?.model) {
         info.model = msg.model;
@@ -184,7 +213,7 @@ export class ContextScanner {
         }
       }
 
-      if (info.estimatedContext > 0 && info.model) break;
+      if (info.estimatedContext > 0 && info.model && info.agentColor) break;
     }
 
     return info;
@@ -377,4 +406,19 @@ function maxTokens(model: string): number {
   if (m.includes("sonnet")) return 200_000;
   if (m.includes("haiku")) return 200_000;
   return 200_000;
+}
+
+// Claude Code /color accepts: red, blue, green, yellow, purple, orange, pink, cyan
+const CLAUDE_COLORS = [
+  "green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red",
+];
+
+function djb2(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function hashToClaudeColor(id: string): string {
+  return CLAUDE_COLORS[djb2(id) % CLAUDE_COLORS.length];
 }

@@ -94,11 +94,12 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     : now - (session.taskStartedAt ?? session.startedAt);
   const buddyId = session.workingDirectory + (suffix ?? "");
   const traits = buddyTraitsFromId(buddyId, suffix ?? undefined);
+  const identityColor: BuddyColor = (session.agentColor as BuddyColor) ?? traits.color;
   const isWorking = session.status === "active" && session.cpuPercent >= 2.0;
   const statusColor: BuddyColor = session.status === "waitingApproval" ? "orange"
     : session.status === "waitingAnswer" ? "cyan"
     : session.status === "error" ? "red"
-    : isWorking ? traits.color
+    : isWorking ? identityColor
     : "gray";
 
   return (
@@ -108,7 +109,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     >
       {/* Top row */}
       <div className="flex items-center gap-1.5">
-        <PixelBuddy color={statusColor} identityColor={traits.color} isActive={isWorking} traits={traits} />
+        <PixelBuddy color={statusColor} identityColor={identityColor} isActive={isWorking} traits={traits} />
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-white">
           {session.sessionName ?? session.taskName ?? dirName}
         </div>

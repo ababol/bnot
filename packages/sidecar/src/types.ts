@@ -105,6 +105,7 @@ export interface AgentSession {
   gitRepoName?: string;
   sessionMode?: SessionMode;
   sessionName?: string;
+  agentColor?: string;
 }
 
 // IPC protocol between Tauri and sidecar

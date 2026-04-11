@@ -43,6 +43,7 @@ export interface AgentSession {
   gitRepoName?: string;
   sessionMode?: SessionMode;
   sessionName?: string;
+  agentColor?: string;
 }
 
 // Derived helpers

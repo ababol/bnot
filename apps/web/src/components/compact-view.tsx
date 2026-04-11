@@ -30,11 +30,12 @@ export default function CompactView({ notchWidth }: Props) {
     ? buddyTraitsFromId(heroSession.workingDirectory + heroSuffix, heroSuffix || undefined)
     : undefined;
   const heroIsWorking = heroSession ? heroSession.status === "active" && heroSession.cpuPercent >= 2.0 : false;
+  const heroIdentityColor: BuddyColor | undefined = (heroSession?.agentColor as BuddyColor) ?? heroTraits?.color;
   const heroColor: BuddyColor = heroSession
     ? heroSession.status === "waitingApproval" ? "orange"
       : heroSession.status === "waitingAnswer" ? "cyan"
       : heroSession.status === "error" ? "red"
-      : heroIsWorking ? (heroTraits?.color ?? "green")
+      : heroIsWorking ? (heroIdentityColor ?? "green")
       : "gray"
     : "gray";
 
@@ -54,7 +55,7 @@ export default function CompactView({ notchWidth }: Props) {
           <span className="text-base text-buddy-green">&#x2713;</span>
         ) : (
           <div className="flex items-center gap-1">
-            <PixelBuddy color={heroColor} identityColor={heroTraits?.color} isActive={heroIsWorking} traits={heroTraits} />
+            <PixelBuddy color={heroColor} identityColor={heroIdentityColor} isActive={heroIsWorking} traits={heroTraits} />
             {heroSession && (
               <div className="relative h-[14px] w-[4px] overflow-hidden rounded-sm bg-white/10">
                 <div
