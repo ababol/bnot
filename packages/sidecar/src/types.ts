@@ -14,6 +14,7 @@ export interface SocketMessage {
   sessionId: string;
   timestamp: string;
   payload: MessagePayload;
+  sessionMode?: string;
 }
 
 export type MessagePayload = {
@@ -66,6 +67,7 @@ export interface ApprovalResponse {
 
 // Session model matching Session.swift
 export type SessionStatus = "active" | "waitingApproval" | "waitingAnswer" | "completed" | "error";
+export type SessionMode = "normal" | "plan" | "auto" | "dangerous";
 
 export interface AgentSession {
   id: string;
@@ -101,6 +103,21 @@ export interface AgentSession {
   gitBranch?: string;
   gitWorktree?: string;
   gitRepoName?: string;
+  sessionMode?: SessionMode;
+  sessionName?: string;
+  agentColor?: string;
+}
+
+// History session from ~/.claude/projects/*/sessions-index.json
+export interface HistorySession {
+  sessionId: string;
+  projectPath: string;
+  summary: string;
+  firstPrompt: string;
+  messageCount: number;
+  gitBranch?: string;
+  created: string;
+  modified: string;
 }
 
 // IPC protocol between Tauri and sidecar

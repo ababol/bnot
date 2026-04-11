@@ -1,10 +1,11 @@
 import { createContext, useContext, useReducer, type ReactNode } from "react";
-import type { AgentSession, PanelState } from "./types";
+import type { AgentSession, HistorySession, PanelState } from "./types";
 
 interface SessionState {
   sessions: Record<string, AgentSession>;
   heroSessionId: string | null;
   panelState: PanelState;
+  history: HistorySession[];
 }
 
 type SessionAction =
@@ -13,12 +14,14 @@ type SessionAction =
       sessions: Record<string, AgentSession>;
       heroId: string | null;
     }
-  | { type: "SET_PANEL_STATE"; panelState: PanelState };
+  | { type: "SET_PANEL_STATE"; panelState: PanelState }
+  | { type: "UPDATE_HISTORY"; history: HistorySession[] };
 
 const initialState: SessionState = {
   sessions: {},
   heroSessionId: null,
   panelState: "compact",
+  history: [],
 };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -31,6 +34,8 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       };
     case "SET_PANEL_STATE":
       return { ...state, panelState: action.panelState };
+    case "UPDATE_HISTORY":
+      return { ...state, history: action.history };
   }
 }
 

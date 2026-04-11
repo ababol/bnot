@@ -4,6 +4,8 @@ import type { SessionManager } from "./session-manager.js";
 
 const exec = promisify(execFile);
 
+import type { SessionMode } from "./types.js";
+
 interface ProcessInfo {
   pid: number;
   parentPid: number;
@@ -15,11 +17,13 @@ interface ProcessInfo {
   gitBranch: string | null;
   gitWorktree: string | null;
   gitRepoName: string | null;
+  sessionMode: SessionMode;
 }
 
 export class ProcessScanner {
   private timer: ReturnType<typeof setInterval> | null = null;
   private sm: SessionManager;
+  private pendingDeletions = new Set<string>();
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -57,6 +61,7 @@ export class ProcessScanner {
           gitBranch: info.gitBranch ?? undefined,
           gitWorktree: info.gitWorktree ?? undefined,
           gitRepoName: info.gitRepoName ?? undefined,
+          sessionMode: info.sessionMode,
         };
         if (!this.sm.heroSessionId) this.sm.heroSessionId = sessionId;
       }
@@ -76,16 +81,29 @@ export class ProcessScanner {
       this.sm.sessions[sessionId].gitBranch = info.gitBranch ?? undefined;
       this.sm.sessions[sessionId].gitWorktree = info.gitWorktree ?? undefined;
       this.sm.sessions[sessionId].gitRepoName = info.gitRepoName ?? undefined;
+      // Process-detected modes (dangerous/auto) override; don't clobber hook-sourced plan mode
+      if (info.sessionMode !== "normal") {
+        this.sm.sessions[sessionId].sessionMode = info.sessionMode;
+      }
     }
 
     const activePidSet = new Set(activePids.map((p) => `proc-${p.pid}`));
+    const alivePids = new Set(activePids.map((p) => p.pid));
 
-    // Mark completed if process gone
+    // Mark completed and schedule deletion if process gone
     for (const [id, session] of Object.entries(this.sm.sessions)) {
-      if (id.startsWith("proc-") && !activePidSet.has(id) && session.status === "active") {
+      if (this.pendingDeletions.has(id)) continue;
+
+      const isOrphan = id.startsWith("proc-")
+        ? !activePidSet.has(id)
+        : session.processPid != null && !alivePids.has(session.processPid);
+
+      if (isOrphan) {
         this.sm.sessions[id].status = "completed";
+        this.pendingDeletions.add(id);
         setTimeout(() => {
           delete this.sm.sessions[id];
+          this.pendingDeletions.delete(id);
           this.sm.emitUpdate();
         }, 5000);
       }
@@ -211,6 +229,14 @@ export class ProcessScanner {
 
       if (!cwd || cwd === "/") continue;
 
+      // Detect session mode from CLI args
+      let sessionMode: SessionMode = "normal";
+      if (args.includes("--dangerously-skip-permissions")) {
+        sessionMode = "dangerous";
+      } else if (/--allowedTools\s+['"]?\*['"]?/.test(args)) {
+        sessionMode = "auto";
+      }
+
       const [terminal, gitBranch, worktreeInfo] = await Promise.all([
         this.getTerminal(parentPid),
         this.getGitBranch(cwd),
@@ -227,6 +253,7 @@ export class ProcessScanner {
         gitBranch,
         gitWorktree: worktreeInfo?.worktree ?? null,
         gitRepoName: worktreeInfo?.repoName ?? null,
+        sessionMode,
       });
     }
 

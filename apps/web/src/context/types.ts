@@ -1,4 +1,5 @@
 export type SessionStatus = "active" | "waitingApproval" | "waitingAnswer" | "completed" | "error";
+export type SessionMode = "normal" | "plan" | "auto" | "dangerous";
 
 export type PanelState = "compact" | "overview" | "approval" | "ask" | "jump";
 
@@ -40,6 +41,21 @@ export interface AgentSession {
   gitBranch?: string;
   gitWorktree?: string;
   gitRepoName?: string;
+  sessionMode?: SessionMode;
+  sessionName?: string;
+  agentColor?: string;
+}
+
+// History session for resume after restart
+export interface HistorySession {
+  sessionId: string;
+  projectPath: string;
+  summary: string;
+  firstPrompt: string;
+  messageCount: number;
+  gitBranch?: string;
+  created: string;
+  modified: string;
 }
 
 // Derived helpers

@@ -21,6 +21,7 @@ pub fn run() {
             commands::navigate_pane,
             commands::activate_app,
             commands::jump_to_session,
+            commands::resume_session,
         ])
         .setup(|app| {
             let win = app.get_webview_window("main").expect("main window");
