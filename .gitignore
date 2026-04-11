@@ -20,3 +20,4 @@ packages/sidecar/dist/
 
 # LLMs
 .claude/.worktrees
+.claude/settings.local.json
