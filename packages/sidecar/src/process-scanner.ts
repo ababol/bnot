@@ -20,6 +20,7 @@ interface ProcessInfo {
 export class ProcessScanner {
   private timer: ReturnType<typeof setInterval> | null = null;
   private sm: SessionManager;
+  private pendingDeletions = new Set<string>();
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -79,13 +80,22 @@ export class ProcessScanner {
     }
 
     const activePidSet = new Set(activePids.map((p) => `proc-${p.pid}`));
+    const alivePids = new Set(activePids.map((p) => p.pid));
 
-    // Mark completed if process gone
+    // Mark completed and schedule deletion if process gone
     for (const [id, session] of Object.entries(this.sm.sessions)) {
-      if (id.startsWith("proc-") && !activePidSet.has(id) && session.status === "active") {
+      if (this.pendingDeletions.has(id)) continue;
+
+      const isOrphan = id.startsWith("proc-")
+        ? !activePidSet.has(id)
+        : session.processPid != null && !alivePids.has(session.processPid);
+
+      if (isOrphan) {
         this.sm.sessions[id].status = "completed";
+        this.pendingDeletions.add(id);
         setTimeout(() => {
           delete this.sm.sessions[id];
+          this.pendingDeletions.delete(id);
           this.sm.emitUpdate();
         }, 5000);
       }

@@ -13,7 +13,7 @@ export default function CompactView({ notchWidth }: Props) {
   const { state, dispatch } = useSession();
   const sessions = state.sessions;
   const heroSession = state.heroSessionId ? sessions[state.heroSessionId] : undefined;
-  const sessionCount = Object.keys(sessions).length;
+  const sessionCount = Object.values(sessions).filter((s) => s.status !== "completed").length;
   const isJump = state.panelState === "jump";
 
   const notchGap = notchWidth + 16;
