@@ -1,6 +1,16 @@
 export type BuddyColor =
-  | "green" | "blue" | "orange" | "cyan" | "gray" | "red"
-  | "purple" | "pink" | "yellow" | "lime" | "white" | "lavender";
+  | "green"
+  | "blue"
+  | "orange"
+  | "cyan"
+  | "gray"
+  | "red"
+  | "purple"
+  | "pink"
+  | "yellow"
+  | "lime"
+  | "white"
+  | "lavender";
 
 export const MAIN_COLORS: Record<BuddyColor, string> = {
   green: "rgb(74, 222, 128)",
@@ -49,8 +59,16 @@ const HATS: BuddyHat[] = ["none", "cap", "horn", "crown"];
 const EARS: BuddyEars[] = ["both", "left", "right", "floppy"];
 const EYES: BuddyEyes[] = ["normal", "winkLeft", "winkRight"];
 const BUDDY_COLORS: BuddyColor[] = [
-  "green", "blue", "orange", "cyan", "purple",
-  "pink", "yellow", "lime", "white", "lavender",
+  "green",
+  "blue",
+  "orange",
+  "cyan",
+  "purple",
+  "pink",
+  "yellow",
+  "lime",
+  "white",
+  "lavender",
 ];
 
 function djb2(s: string): number {
@@ -82,6 +100,38 @@ export function buddyTraitsFromId(id: string, branch?: string): BuddyTraits {
     ears: EARS[(h >> 8) % EARS.length],
     eyes: EYES[(h >> 12) % EYES.length],
   };
+}
+
+const BUDDY_COLOR_SET = new Set<string>([
+  "green",
+  "blue",
+  "orange",
+  "cyan",
+  "gray",
+  "red",
+  "purple",
+  "pink",
+  "yellow",
+  "lime",
+  "white",
+  "lavender",
+]);
+
+export function parseBuddyColor(value: string | undefined): BuddyColor | undefined {
+  if (value && BUDDY_COLOR_SET.has(value)) return value as BuddyColor;
+  return undefined;
+}
+
+export function sessionStatusColor(
+  status: string,
+  cpuPercent: number,
+  identityColor: BuddyColor,
+): BuddyColor {
+  if (status === "waitingApproval") return "orange";
+  if (status === "waitingAnswer") return "cyan";
+  if (status === "error") return "red";
+  if (status === "active" && cpuPercent >= 2.0) return identityColor;
+  return "gray";
 }
 
 /** Buddy body color based on context fill percent: green -> yellow -> red */

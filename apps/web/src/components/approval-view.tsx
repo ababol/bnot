@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSession } from "../context/session-context";
+import { setPanelState } from "../lib/tauri";
 import DiffView from "./diff-view";
 
 interface Props {
@@ -14,10 +15,7 @@ export default function ApprovalView({ notchHeight }: Props) {
   );
   const approval = session?.pendingApproval;
 
-  const close = () => {
-    dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
-    invoke("set_panel_state", { state: "compact" });
-  };
+  const close = () => setPanelState(dispatch, "compact");
 
   const approve = () => {
     if (session) invoke("approve_session", { sessionId: session.id });

@@ -2,6 +2,8 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
 import { RepoFinder } from "./repo-finder.js";
+import { detectRunningTerminal } from "./terminal-jumper.js";
+import { escapeShell } from "./terminal-utils.js";
 
 const exec = promisify(execFile);
 
@@ -21,18 +23,11 @@ interface WorktreeInfo {
 export class WorktreeCreator {
   constructor(private repoFinder: RepoFinder) {}
 
-  async open(
-    req: WorktreeRequest,
-  ): Promise<{ success: boolean; path?: string; error?: string }> {
-    process.stderr.write(
-      `[worktree] request: ${req.headOwner}/${req.headRepo}#${req.branch}\n`,
-    );
+  async open(req: WorktreeRequest): Promise<{ success: boolean; path?: string; error?: string }> {
+    process.stderr.write(`[worktree] request: ${req.headOwner}/${req.headRepo}#${req.branch}\n`);
 
     // 1. Find local repo
-    let repoPath = await this.repoFinder.findRepo(
-      req.headOwner,
-      req.headRepo,
-    );
+    let repoPath = await this.repoFinder.findRepo(req.headOwner, req.headRepo);
     if (!repoPath) {
       repoPath = await this.repoFinder.findRepo(req.owner, req.repo);
     }
@@ -48,9 +43,7 @@ export class WorktreeCreator {
     // 2. Check existing worktrees for this branch
     const existing = await this.findExistingWorktree(repoPath, req.branch);
     if (existing) {
-      process.stderr.write(
-        `[worktree] existing worktree found at ${existing.path}\n`,
-      );
+      process.stderr.write(`[worktree] existing worktree found at ${existing.path}\n`);
       await openTerminal(existing.path);
       emit("worktreeStatus", {
         status: "success",
@@ -61,17 +54,14 @@ export class WorktreeCreator {
     }
 
     // 3. Handle fork: ensure remote exists
-    const isFork =
-      req.headOwner.toLowerCase() !== req.owner.toLowerCase();
+    const isFork = req.headOwner.toLowerCase() !== req.owner.toLowerCase();
     let remote = "origin";
 
     if (isFork) {
       remote = req.headOwner;
       const hasRemote = await this.hasRemote(repoPath, remote);
       if (!hasRemote) {
-        process.stderr.write(
-          `[worktree] adding fork remote: ${remote}\n`,
-        );
+        process.stderr.write(`[worktree] adding fork remote: ${remote}\n`);
         await exec(
           "git",
           [
@@ -89,14 +79,8 @@ export class WorktreeCreator {
 
     // 4. Fetch the branch
     try {
-      process.stderr.write(
-        `[worktree] fetching ${remote}/${req.branch}\n`,
-      );
-      await exec(
-        "git",
-        ["-C", repoPath, "fetch", remote, req.branch],
-        { timeout: 30000 },
-      );
+      process.stderr.write(`[worktree] fetching ${remote}/${req.branch}\n`);
+      await exec("git", ["-C", repoPath, "fetch", remote, req.branch], { timeout: 30000 });
     } catch (err) {
       const msg = `Failed to fetch ${remote}/${req.branch}: ${err}`;
       process.stderr.write(`[worktree] ${msg}\n`);
@@ -109,9 +93,7 @@ export class WorktreeCreator {
     const worktreePath = `${repoPath}/.claude/worktrees/${dirName}`;
 
     try {
-      process.stderr.write(
-        `[worktree] creating at ${worktreePath}\n`,
-      );
+      process.stderr.write(`[worktree] creating at ${worktreePath}\n`);
       await exec(
         "git",
         [
@@ -148,11 +130,9 @@ export class WorktreeCreator {
     branch: string,
   ): Promise<WorktreeInfo | null> {
     try {
-      const { stdout } = await exec(
-        "git",
-        ["-C", repoPath, "worktree", "list", "--porcelain"],
-        { timeout: 5000 },
-      );
+      const { stdout } = await exec("git", ["-C", repoPath, "worktree", "list", "--porcelain"], {
+        timeout: 5000,
+      });
 
       let currentPath = "";
       for (const line of stdout.split("\n")) {
@@ -173,16 +153,9 @@ export class WorktreeCreator {
     return null;
   }
 
-  private async hasRemote(
-    repoPath: string,
-    remoteName: string,
-  ): Promise<boolean> {
+  private async hasRemote(repoPath: string, remoteName: string): Promise<boolean> {
     try {
-      const { stdout } = await exec(
-        "git",
-        ["-C", repoPath, "remote"],
-        { timeout: 5000 },
-      );
+      const { stdout } = await exec("git", ["-C", repoPath, "remote"], { timeout: 5000 });
       return stdout.split("\n").some((r) => r.trim() === remoteName);
     } catch {
       return false;
@@ -196,19 +169,6 @@ function sanitizeBranchName(branch: string): string {
     .replace(/[^a-zA-Z0-9._-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-}
-
-async function detectRunningTerminal(): Promise<string> {
-  try {
-    const { stdout } = await exec("/bin/ps", ["-eo", "comm"]);
-    if (stdout.includes("ghostty")) return "ghostty";
-    if (stdout.includes("iTerm")) return "iterm";
-    if (stdout.includes("Warp")) return "warp";
-    if (stdout.includes("Terminal")) return "terminal";
-  } catch {
-    // ignore
-  }
-  return "ghostty";
 }
 
 async function openTerminal(dir: string): Promise<void> {
@@ -230,8 +190,4 @@ end tell`;
   } catch (err) {
     process.stderr.write(`[worktree] failed to open terminal: ${err}\n`);
   }
-}
-
-function escapeShell(s: string): string {
-  return s.replace(/'/g, "'\\''");
 }

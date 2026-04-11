@@ -10,12 +10,14 @@ use hook_input::ClaudeHookInput;
 
 const SOCKET_PATH: &str = ".buddy-notch/buddy.sock";
 const DANGEROUS_TOOLS: &[&str] = &["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"];
+const MAX_PARENT_WALK: usize = 5;
+const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Check if Claude Code is running in auto-approve mode by inspecting
 /// the process tree for --dangerously-skip-permissions.
 fn is_auto_approved() -> bool {
     let mut pid = unsafe { libc::getppid() } as u32;
-    for _ in 0..5 {
+    for _ in 0..MAX_PARENT_WALK {
         if pid <= 1 {
             break;
         }
@@ -27,7 +29,7 @@ fn is_auto_approved() -> bool {
             if s.contains("dangerously-skip") {
                 return true;
             }
-            pid = s.trim().split_whitespace().next()
+            pid = s.split_whitespace().next()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(0);
         } else {
@@ -280,8 +282,9 @@ fn now_iso() -> String {
     unsafe {
         let mut t: libc::time_t = 0;
         libc::time(&mut t);
-        let mut tm: libc::tm = std::mem::zeroed();
-        libc::gmtime_r(&t, &mut tm);
+        let mut tm = std::mem::MaybeUninit::<libc::tm>::uninit();
+        libc::gmtime_r(&t, tm.as_mut_ptr());
+        let tm = tm.assume_init();
         format!(
             "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
             tm.tm_year + 1900,
@@ -307,7 +310,7 @@ fn send_message(msg: &SocketMessage) -> Result<(), Box<dyn std::error::Error>> {
 /// Returns None on connection failure, timeout, or parse error (graceful fallback).
 fn send_and_wait(msg1: &SocketMessage, msg2: &SocketMessage) -> Option<ApprovalResponse> {
     let mut stream = UnixStream::connect(socket_path()).ok()?;
-    stream.set_read_timeout(Some(Duration::from_secs(120))).ok()?;
+    stream.set_read_timeout(Some(APPROVAL_TIMEOUT)).ok()?;
 
     // Write both messages on the same connection
     let json1 = serde_json::to_string(msg1).ok()?;

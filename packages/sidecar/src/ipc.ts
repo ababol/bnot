@@ -18,7 +18,8 @@ rl.on("line", async (line) => {
       const result = await handler(req.method, req.params);
       send({ id: req.id, result } as IpcResponse);
     } catch (err) {
-      send({ id: req.id, error: String(err) } as IpcResponse);
+      const errMsg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+      send({ id: req.id, error: errMsg } as IpcResponse);
     }
   } catch {
     // Invalid JSON — ignore

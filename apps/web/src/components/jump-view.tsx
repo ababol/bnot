@@ -1,20 +1,21 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useSession } from "../context/session-context";
+import { directoryName } from "../context/types";
+import { useHeroSession } from "../hooks/use-hero-session";
+import { jumpToSession, setPanelState } from "../lib/tauri";
 
 interface Props {
   notchHeight: number;
 }
 
 export default function JumpView({ notchHeight }: Props) {
-  const { state, dispatch } = useSession();
-  const heroSession = state.heroSessionId ? state.sessions[state.heroSessionId] : undefined;
+  const { dispatch } = useSession();
+  const heroSession = useHeroSession();
 
-  const dirName = heroSession?.workingDirectory.split("/").pop() ?? "Task";
+  const dirName = heroSession ? directoryName(heroSession) : "Task";
 
   const jump = () => {
-    if (heroSession) invoke("jump_to_session", { sessionId: heroSession.id });
-    dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
-    invoke("set_panel_state", { state: "compact" });
+    if (heroSession) jumpToSession(heroSession.id);
+    setPanelState(dispatch, "compact");
   };
 
   return (

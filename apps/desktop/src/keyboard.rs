@@ -1,4 +1,4 @@
-use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation, EventField};
+use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
 /// Virtual key codes (Carbon kVK_* constants)
@@ -42,9 +42,11 @@ fn send_key(key_code: u16, flags: CGEventFlags) {
     }
 }
 
+const KEY_REPEAT_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
+
 /// Send Cmd+N to switch to tab N (1-9)
 pub fn send_goto_tab(tab: u16) {
-    if tab < 1 || tab > 9 {
+    if !(1..=9).contains(&tab) {
         return;
     }
     send_key(TAB_KEYS[(tab - 1) as usize], CGEventFlags::CGEventFlagCommand);
@@ -54,11 +56,11 @@ pub fn send_goto_tab(tab: u16) {
 pub fn navigate_pane(reset_count: u16, forward_count: u16) {
     for _ in 0..reset_count {
         send_key(KVK_ANSI_LEFT_BRACKET, CGEventFlags::CGEventFlagCommand);
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::thread::sleep(KEY_REPEAT_DELAY);
     }
     for _ in 0..forward_count {
         send_key(KVK_ANSI_RIGHT_BRACKET, CGEventFlags::CGEventFlagCommand);
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::thread::sleep(KEY_REPEAT_DELAY);
     }
 }
 

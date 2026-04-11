@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub struct ClaudeHookInput {
     #[serde(rename = "session_id")]
     pub session_id: Option<String>,
+    #[allow(dead_code)]
     #[serde(rename = "hookEventName")]
     pub hook_event_name: Option<String>,
     #[serde(rename = "tool_name")]
@@ -22,6 +23,7 @@ pub struct ToolInput {
     pub command: Option<String>,
     #[serde(rename = "file_path")]
     pub file_path: Option<String>,
+    #[allow(dead_code)]
     pub content: Option<String>,
     pub diff: Option<String>,
     #[serde(rename = "old_string")]
@@ -48,5 +50,6 @@ pub struct OptionItem {
 pub struct ToolResponse {
     #[serde(rename = "filePath")]
     pub file_path: Option<String>,
+    #[allow(dead_code)]
     pub success: Option<bool>,
 }

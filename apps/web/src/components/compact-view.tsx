@@ -1,8 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useSession } from "../context/session-context";
 import { contextPercent } from "../context/types";
+import { useHeroSession } from "../hooks/use-hero-session";
 import type { BuddyColor } from "../lib/colors";
-import { buddyTraitsFromId, MAIN_COLORS } from "../lib/colors";
+import { buddyTraitsFromId, MAIN_COLORS, parseBuddyColor, sessionStatusColor } from "../lib/colors";
+import { setPanelState } from "../lib/tauri";
 import PixelBuddy from "./pixel-buddy";
 
 const MODE_DOT_COLOR: Record<string, string> = {
@@ -18,7 +19,7 @@ interface Props {
 export default function CompactView({ notchWidth }: Props) {
   const { state, dispatch } = useSession();
   const sessions = state.sessions;
-  const heroSession = state.heroSessionId ? sessions[state.heroSessionId] : undefined;
+  const heroSession = useHeroSession();
   const sessionCount = Object.values(sessions).filter((s) => s.status !== "completed").length;
   const isJump = state.panelState === "jump";
 
@@ -29,19 +30,17 @@ export default function CompactView({ notchWidth }: Props) {
   const heroTraits = heroSession
     ? buddyTraitsFromId(heroSession.workingDirectory + heroSuffix, heroSuffix || undefined)
     : undefined;
-  const heroIsWorking = heroSession ? heroSession.status === "active" && heroSession.cpuPercent >= 2.0 : false;
-  const heroIdentityColor: BuddyColor | undefined = (heroSession?.agentColor as BuddyColor) ?? heroTraits?.color;
+  const heroIsWorking = heroSession
+    ? heroSession.status === "active" && heroSession.cpuPercent >= 2.0
+    : false;
+  const heroIdentityColor: BuddyColor | undefined =
+    parseBuddyColor(heroSession?.agentColor) ?? heroTraits?.color;
   const heroColor: BuddyColor = heroSession
-    ? heroSession.status === "waitingApproval" ? "orange"
-      : heroSession.status === "waitingAnswer" ? "cyan"
-      : heroSession.status === "error" ? "red"
-      : heroIsWorking ? (heroIdentityColor ?? "green")
-      : "gray"
+    ? sessionStatusColor(heroSession.status, heroSession.cpuPercent, heroIdentityColor ?? "green")
     : "gray";
 
   const handleClick = () => {
-    dispatch({ type: "SET_PANEL_STATE", panelState: "overview" });
-    invoke("set_panel_state", { state: "overview" });
+    setPanelState(dispatch, "overview");
   };
 
   return (
@@ -55,7 +54,12 @@ export default function CompactView({ notchWidth }: Props) {
           <span className="text-base text-buddy-green">&#x2713;</span>
         ) : (
           <div className="flex items-center gap-1">
-            <PixelBuddy color={heroColor} identityColor={heroIdentityColor} isActive={heroIsWorking} traits={heroTraits} />
+            <PixelBuddy
+              color={heroColor}
+              identityColor={heroIdentityColor}
+              isActive={heroIsWorking}
+              traits={heroTraits}
+            />
             {heroSession && (
               <div className="relative h-[14px] w-[4px] overflow-hidden rounded-sm bg-white/10">
                 <div
@@ -68,7 +72,9 @@ export default function CompactView({ notchWidth }: Props) {
               </div>
             )}
             {heroSession?.sessionMode && MODE_DOT_COLOR[heroSession.sessionMode] && (
-              <div className={`h-[5px] w-[5px] rounded-full ${MODE_DOT_COLOR[heroSession.sessionMode]}`} />
+              <div
+                className={`h-[5px] w-[5px] rounded-full ${MODE_DOT_COLOR[heroSession.sessionMode]}`}
+              />
             )}
           </div>
         )}

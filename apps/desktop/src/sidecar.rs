@@ -49,7 +49,7 @@ impl SidecarManager {
     }
 
     fn start_sidecar<R: Runtime>(
-        dir: &PathBuf,
+        dir: &std::path::Path,
         child: &Arc<Mutex<Option<Child>>>,
         stdin_arc: &Arc<Mutex<Option<ChildStdin>>>,
         app: &AppHandle<R>,
@@ -59,11 +59,11 @@ impl SidecarManager {
         let (cmd, args, work_dir): (String, Vec<String>, PathBuf) = if bundled_mjs.exists() {
             // Bundled: run with node
             let node = find_executable("node").ok_or("node not found in PATH")?;
-            (node, vec!["index.mjs".to_string()], dir.clone())
+            (node, vec!["index.mjs".to_string()], dir.to_path_buf())
         } else {
             // Dev: run with npx tsx
             let npx = find_executable("npx").ok_or("npx not found in PATH")?;
-            (npx, vec!["tsx".to_string(), "src/index.ts".to_string()], dir.clone())
+            (npx, vec!["tsx".to_string(), "src/index.ts".to_string()], dir.to_path_buf())
         };
 
         let mut proc = Command::new(&cmd)
@@ -107,7 +107,6 @@ impl SidecarManager {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn kill(&self) {
         if let Some(ref mut child) = *self.child.lock().unwrap() {
             let _ = child.kill();
@@ -226,7 +225,7 @@ fn find_executable(name: &str) -> Option<String> {
                 parts.get(2).copied().unwrap_or(0),
             )
         };
-        versions.sort_by(|a, b| parse_ver(b.file_name()).cmp(&parse_ver(a.file_name())));
+        versions.sort_by_key(|e| std::cmp::Reverse(parse_ver(e.file_name())));
         for entry in versions {
             let candidate = entry.path().join("bin").join(name);
             if candidate.exists() {

@@ -1,10 +1,11 @@
 import * as fs from "fs/promises";
-import * as os from "os";
 import * as path from "path";
 import { emit } from "./ipc.js";
+import { CLAUDE_DIR } from "./paths.js";
 import type { HistorySession } from "./types.js";
 
-const CLAUDE_DIR = path.join(os.homedir(), ".claude");
+const INITIAL_SCAN_DELAY_MS = 4000;
+const SCAN_INTERVAL_MS = 30000;
 const MAX_HISTORY = 20;
 
 export class HistoryScanner {
@@ -12,8 +13,8 @@ export class HistoryScanner {
 
   start() {
     // Initial scan after a short delay to let ProcessScanner populate first
-    setTimeout(() => this.scan(), 4000);
-    this.timer = setInterval(() => this.scan(), 30000);
+    setTimeout(() => this.scan(), INITIAL_SCAN_DELAY_MS);
+    this.timer = setInterval(() => this.scan(), SCAN_INTERVAL_MS);
   }
 
   stop() {
@@ -79,24 +80,8 @@ export class HistoryScanner {
         if (!Array.isArray(entries)) continue;
 
         for (const entry of entries) {
-          const e = entry as Record<string, unknown>;
-          if (!e.sessionId || typeof e.sessionId !== "string") continue;
-          if (activeIds.has(e.sessionId)) continue;
-          if (e.isSidechain === true) continue;
-
-          const firstPrompt = (e.firstPrompt as string) ?? "";
-          if (!firstPrompt || firstPrompt === "No prompt") continue;
-
-          all.push({
-            sessionId: e.sessionId as string,
-            projectPath: (e.projectPath as string) ?? "",
-            summary: (e.summary as string) ?? "",
-            firstPrompt,
-            messageCount: (e.messageCount as number) ?? 0,
-            gitBranch: (e.gitBranch as string) ?? undefined,
-            created: (e.created as string) ?? "",
-            modified: (e.modified as string) ?? "",
-          });
+          const parsed = parseHistoryEntry(entry, activeIds);
+          if (parsed) all.push(parsed);
         }
       } catch {
         // Skip malformed index files
@@ -112,4 +97,25 @@ export class HistoryScanner {
 
     return all.slice(0, MAX_HISTORY);
   }
+}
+
+function parseHistoryEntry(entry: unknown, activeIds: Set<string>): HistorySession | null {
+  const e = entry as Record<string, unknown>;
+  const sessionId = typeof e.sessionId === "string" ? e.sessionId : null;
+  if (!sessionId || activeIds.has(sessionId)) return null;
+  if (e.isSidechain === true) return null;
+
+  const firstPrompt = typeof e.firstPrompt === "string" ? e.firstPrompt : "";
+  if (!firstPrompt || firstPrompt === "No prompt") return null;
+
+  return {
+    sessionId,
+    projectPath: typeof e.projectPath === "string" ? e.projectPath : "",
+    summary: typeof e.summary === "string" ? e.summary : "",
+    firstPrompt,
+    messageCount: typeof e.messageCount === "number" ? e.messageCount : 0,
+    gitBranch: typeof e.gitBranch === "string" ? e.gitBranch : undefined,
+    created: typeof e.created === "string" ? e.created : "",
+    modified: typeof e.modified === "string" ? e.modified : "",
+  };
 }

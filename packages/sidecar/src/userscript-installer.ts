@@ -1,11 +1,8 @@
 import { execFile } from "child_process";
 import * as fs from "fs";
 import * as http from "http";
-import * as os from "os";
 import * as path from "path";
-
-const RUNTIME_DIR = path.join(os.homedir(), ".buddy-notch");
-const CONFIG_PATH = path.join(RUNTIME_DIR, "config.json");
+import { CONFIG_PATH, RUNTIME_DIR } from "./paths.js";
 
 /**
  * On first launch, serve the userscript over HTTP and open it in the browser.

@@ -1,12 +1,7 @@
 import * as fs from "fs";
 import * as net from "net";
-import * as os from "os";
-import * as path from "path";
+import { PID_PATH, RUNTIME_DIR, SOCKET_PATH } from "./paths.js";
 import type { ApprovalResponse, SocketMessage } from "./types.js";
-
-const RUNTIME_DIR = path.join(os.homedir(), ".buddy-notch");
-const SOCKET_PATH = path.join(RUNTIME_DIR, "buddy.sock");
-const PID_PATH = path.join(RUNTIME_DIR, "buddy.pid");
 
 type MessageHandler = (msg: SocketMessage, clientFd: number) => void;
 

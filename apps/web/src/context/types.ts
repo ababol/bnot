@@ -71,3 +71,7 @@ export function directoryName(s: AgentSession): string {
 export function isIdle(s: AgentSession): boolean {
   return s.status === "active" && s.cpuPercent < 2.0;
 }
+
+export function projectName(s: HistorySession): string {
+  return s.projectPath.split("/").pop() ?? s.projectPath;
+}

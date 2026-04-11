@@ -3,11 +3,9 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { promisify } from "util";
+import { CONFIG_PATH, RUNTIME_DIR } from "./paths.js";
 
 const exec = promisify(execFile);
-
-const RUNTIME_DIR = path.join(os.homedir(), ".buddy-notch");
-const CONFIG_PATH = path.join(RUNTIME_DIR, "config.json");
 
 interface RepoEntry {
   localPath: string;
@@ -84,9 +82,7 @@ export class RepoFinder {
     }
 
     this.cacheTime = Date.now();
-    process.stderr.write(
-      `[repo-finder] scanned ${this.cache.size} repos\n`,
-    );
+    process.stderr.write(`[repo-finder] scanned ${this.cache.size} repos\n`);
   }
 
   private async getRemotes(
@@ -146,19 +142,13 @@ export class RepoFinder {
   }
 }
 
-function parseGitRemoteUrl(
-  url: string,
-): { owner: string; repo: string } | null {
+function parseGitRemoteUrl(url: string): { owner: string; repo: string } | null {
   // SSH: git@github.com:owner/repo.git
-  const sshMatch = url.match(
-    /git@github\.com:([^/]+)\/([^/\s]+?)(?:\.git)?$/,
-  );
+  const sshMatch = url.match(/git@github\.com:([^/]+)\/([^/\s]+?)(?:\.git)?$/);
   if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] };
 
   // HTTPS: https://github.com/owner/repo.git
-  const httpsMatch = url.match(
-    /github\.com\/([^/]+)\/([^/\s]+?)(?:\.git)?$/,
-  );
+  const httpsMatch = url.match(/github\.com\/([^/]+)\/([^/\s]+?)(?:\.git)?$/);
   if (httpsMatch) return { owner: httpsMatch[1], repo: httpsMatch[2] };
 
   return null;

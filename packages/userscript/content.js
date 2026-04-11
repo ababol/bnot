@@ -4,17 +4,13 @@
   const BTN_CLASS = "buddynotch-worktree-btn";
 
   function getPRMetadata() {
-    const urlMatch = location.pathname.match(
-      /\/([^/]+)\/([^/]+)\/pull\/(\d+)/,
-    );
+    const urlMatch = location.pathname.match(/\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
     if (!urlMatch) return null;
 
     const [, owner, repo] = urlMatch;
 
     // Find any head branch link to extract metadata
-    const branchLinks = document.querySelectorAll(
-      'a[class*="BranchName"][href*="/tree/"]',
-    );
+    const branchLinks = document.querySelectorAll('a[class*="BranchName"][href*="/tree/"]');
 
     // Head branch links are inside a div with a copy button sibling
     for (const link of branchLinks) {
@@ -104,9 +100,7 @@
     if (!meta) return;
 
     // Find all head branch containers (the ones with the copy button)
-    const branchLinks = document.querySelectorAll(
-      'a[class*="BranchName"][href*="/tree/"]',
-    );
+    const branchLinks = document.querySelectorAll('a[class*="BranchName"][href*="/tree/"]');
 
     for (const link of branchLinks) {
       // Head branch link's direct parent is a div; base branch is inside a span

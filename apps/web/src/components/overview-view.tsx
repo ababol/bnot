@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSession } from "../context/session-context";
 import { buddyColorFromSessions } from "../lib/colors";
+import { jumpToSession, setPanelState } from "../lib/tauri";
 import HistoryCard from "./history-card";
 import PixelBuddy from "./pixel-buddy";
 import SessionCard from "./session-card";
@@ -19,20 +20,15 @@ export default function OverviewView({ notchHeight }: Props) {
   const heroId = state.heroSessionId ?? sortedSessions[0]?.id ?? null;
   const buddyColor = buddyColorFromSessions(sessions);
 
-  const close = () => {
-    dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
-    invoke("set_panel_state", { state: "compact" });
-  };
+  const close = () => setPanelState(dispatch, "compact");
 
   const handleSessionClick = (sessionId: string) => {
-    dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
-    invoke("set_panel_state", { state: "compact" });
-    setTimeout(() => invoke("jump_to_session", { sessionId }), 80);
+    setPanelState(dispatch, "compact");
+    setTimeout(() => jumpToSession(sessionId), 80);
   };
 
   const handleResumeClick = (sessionId: string, projectPath: string) => {
-    dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
-    invoke("set_panel_state", { state: "compact" });
+    setPanelState(dispatch, "compact");
     setTimeout(() => invoke("resume_session", { sessionId, projectPath }), 80);
   };
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useReducer, type ReactNode } from "react";
 import type { AgentSession, HistorySession, PanelState } from "./types";
 
 interface SessionState {
@@ -8,7 +8,7 @@ interface SessionState {
   history: HistorySession[];
 }
 
-type SessionAction =
+export type SessionAction =
   | {
       type: "UPDATE_SESSIONS";
       sessions: Record<string, AgentSession>;
@@ -36,6 +36,8 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       return { ...state, panelState: action.panelState };
     case "UPDATE_HISTORY":
       return { ...state, history: action.history };
+    default:
+      return action satisfies never;
   }
 }
 
@@ -46,7 +48,8 @@ const SessionContext = createContext<{
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(sessionReducer, initialState);
-  return <SessionContext.Provider value={{ state, dispatch }}>{children}</SessionContext.Provider>;
+  const value = useMemo(() => ({ state, dispatch }), [state, dispatch]);
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
 export function useSession() {

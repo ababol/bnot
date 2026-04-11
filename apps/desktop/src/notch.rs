@@ -5,6 +5,11 @@ use objc2_app_kit::NSScreen;
 use objc2_foundation::NSRect;
 use serde::Serialize;
 
+/// Known screen heights (logical points) for notched MacBook displays.
+const NOTCHED_SCREEN_HEIGHTS: &[f64] = &[900.0, 982.0, 1117.0, 1120.0];
+const ESTIMATED_NOTCH_WIDTH: f64 = 200.0;
+const ESTIMATED_NOTCH_HEIGHT: f64 = 32.0;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct NotchGeometry {
     #[serde(rename = "centerX")]
@@ -30,7 +35,7 @@ pub fn get_notch_geometry() -> Option<NotchGeometry> {
         return Some(cached.clone());
     }
 
-    let mtm = MainThreadMarker::from(unsafe { MainThreadMarker::new_unchecked() });
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
 
     let screen = NSScreen::mainScreen(mtm)?;
     let frame = screen.frame();
@@ -63,14 +68,13 @@ pub fn get_notch_geometry() -> Option<NotchGeometry> {
         // (not a bundled .app). Detect notched Macs by their non-standard screen heights:
         // 14" = 900pt, 16" = 1117pt (both have fractional backing scale factors)
         let h = frame.size.height;
-        let has_notch = h == 1117.0 || h == 900.0 || h == 1120.0 || h == 982.0;
-        if !has_notch {
+        if !NOTCHED_SCREEN_HEIGHTS.contains(&h) {
             return None;
         }
         let cx = frame.origin.x + frame.size.width / 2.0;
         let ty = frame.origin.y + frame.size.height;
-        let nw = 200.0;
-        let nh = 32.0;
+        let nw = ESTIMATED_NOTCH_WIDTH;
+        let nh = ESTIMATED_NOTCH_HEIGHT;
         eprintln!("[notch] using estimated geometry for h={}", h);
         (cx, ty, nw, nh)
     };
@@ -86,12 +90,4 @@ pub fn get_notch_geometry() -> Option<NotchGeometry> {
     let _ = CACHED_GEOMETRY.set(geom.clone());
 
     Some(geom)
-}
-
-/// Get main screen height (for coordinate flipping). Falls back to 900.
-pub fn screen_height() -> f64 {
-    let mtm = unsafe { MainThreadMarker::new_unchecked() };
-    NSScreen::mainScreen(mtm)
-        .map(|s| s.frame().size.height)
-        .unwrap_or(900.0)
 }

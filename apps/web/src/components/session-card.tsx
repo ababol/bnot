@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
 import type { AgentSession, SessionStatus } from "../context/types";
-import { contextPercent } from "../context/types";
+import { contextPercent, directoryName, isIdle } from "../context/types";
+import { useTimer } from "../hooks/use-timer";
 import type { BuddyColor } from "../lib/colors";
-import { buddyTraitsFromId } from "../lib/colors";
+import { buddyTraitsFromId, parseBuddyColor, sessionStatusColor } from "../lib/colors";
+import { formatElapsed, formatIdle, shortenPath, tokenShort } from "../lib/format";
 import PixelBuddy from "./pixel-buddy";
 import PixelProgressBar from "./pixel-progress-bar";
 
@@ -42,65 +43,20 @@ const MODE_BADGE: Record<string, { label: string; bg: string; text: string }> = 
   dangerous: { label: "YOLO", bg: "bg-[#3a2020]", text: "text-[#bf6a6a]" },
 };
 
-function formatElapsed(ms: number): string {
-  const s = ms / 1000;
-  if (s < 60) return `${Math.floor(s)}s`;
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  if (m < 60) return `${m}m${String(sec).padStart(2, "0")}s`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return `${h}h${String(rm).padStart(2, "0")}m`;
-}
-
-function formatIdle(ms: number): string {
-  const m = Math.floor(ms / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  if (rm === 0) return `${h}h ago`;
-  return `${h}h${rm}m ago`;
-}
-
-function useTimer(intervalMs = 1000): number {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
-
-function shortenPath(p: string): string {
-  const parts = p.split("/");
-  return parts.length > 2 ? parts.slice(-2).join("/") : p;
-}
-
-function tokenShort(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
-  if (tokens >= 1_000) return `${Math.floor(tokens / 1_000)}K`;
-  return String(tokens);
-}
-
 export default function SessionCard({ session, isHero, onClick }: Props) {
   const now = useTimer();
-  const repoName = session.gitRepoName ?? session.workingDirectory.split("/").pop() ?? session.workingDirectory;
+  const repoName = session.gitRepoName ?? directoryName(session);
   const suffix = session.gitWorktree ?? session.gitBranch;
   const dirName = suffix ? `${repoName}/${suffix}` : repoName;
-  const isIdle = session.status === "active" && session.cpuPercent < 2.0;
-  const elapsed = isIdle
+  const idle = isIdle(session);
+  const elapsed = idle
     ? now - session.lastActivity
     : now - (session.taskStartedAt ?? session.startedAt);
   const buddyId = session.workingDirectory + (suffix ?? "");
   const traits = buddyTraitsFromId(buddyId, suffix ?? undefined);
-  const identityColor: BuddyColor = (session.agentColor as BuddyColor) ?? traits.color;
+  const identityColor: BuddyColor = parseBuddyColor(session.agentColor) ?? traits.color;
   const isWorking = session.status === "active" && session.cpuPercent >= 2.0;
-  const statusColor: BuddyColor = session.status === "waitingApproval" ? "orange"
-    : session.status === "waitingAnswer" ? "cyan"
-    : session.status === "error" ? "red"
-    : isWorking ? identityColor
-    : "gray";
+  const statusColor = sessionStatusColor(session.status, session.cpuPercent, identityColor);
 
   return (
     <div
@@ -109,12 +65,17 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     >
       {/* Top row */}
       <div className="flex items-center gap-1.5">
-        <PixelBuddy color={statusColor} identityColor={identityColor} isActive={isWorking} traits={traits} />
+        <PixelBuddy
+          color={statusColor}
+          identityColor={identityColor}
+          isActive={isWorking}
+          traits={traits}
+        />
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-white">
           {session.sessionName ?? session.taskName ?? dirName}
         </div>
         <div className="shrink-0 font-mono text-[10px] text-text-dim">
-          {isIdle ? formatIdle(elapsed) : formatElapsed(elapsed)}
+          {idle ? formatIdle(elapsed) : formatElapsed(elapsed)}
         </div>
         {session.sessionMode && MODE_BADGE[session.sessionMode] && (
           <span
@@ -151,19 +112,17 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
             {session.workingDirectory}
           </div>
 
-          {(
-            <div className="mt-1.5 flex items-center gap-1.5">
-              <div className="flex-1">
-                <PixelProgressBar
-                  percent={contextPercent(session)}
-                  color={STATUS_BUDDY[session.status]}
-                />
-              </div>
-              <div className="shrink-0 font-mono text-[9px] font-medium text-text-dim">
-                {tokenShort(session.contextTokens)}/{tokenShort(session.maxContextTokens)}
-              </div>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <div className="flex-1">
+              <PixelProgressBar
+                percent={contextPercent(session)}
+                color={STATUS_BUDDY[session.status]}
+              />
             </div>
-          )}
+            <div className="shrink-0 font-mono text-[9px] font-medium text-text-dim">
+              {tokenShort(session.contextTokens)}/{tokenShort(session.maxContextTokens)}
+            </div>
+          </div>
         </div>
       )}
     </div>

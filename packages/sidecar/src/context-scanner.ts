@@ -1,12 +1,21 @@
 import { execFile } from "child_process";
 import * as fs from "fs/promises";
-import * as os from "os";
 import * as path from "path";
 import { promisify } from "util";
+import { CLAUDE_DIR } from "./paths.js";
 import type { SessionManager } from "./session-manager.js";
 
 const exec = promisify(execFile);
-const CLAUDE_DIR = path.join(os.homedir(), ".claude");
+
+const INITIAL_SCAN_DELAY_MS = 3000;
+const SCAN_INTERVAL_MS = 3000;
+const EXACT_QUERY_INTERVAL_MS = 60000;
+const TAIL_READ_BYTES = 65536;
+const HEAD_READ_BYTES = 8192;
+const ESTIMATION_RATIO = 0.85;
+const OVER_RATIO_OFFSET = 0.08;
+const MIN_FILL_PERCENT = 0.3;
+const MAX_FILL_PERCENT = 0.7;
 
 interface SessionInfo {
   model?: string;
@@ -33,9 +42,9 @@ export class ContextScanner {
     setTimeout(() => {
       this.scan();
       this.fetchExactContexts();
-    }, 3000);
-    this.timer = setInterval(() => this.scan(), 3000);
-    this.exactTimer = setInterval(() => this.fetchExactContexts(), 60000);
+    }, INITIAL_SCAN_DELAY_MS);
+    this.timer = setInterval(() => this.scan(), SCAN_INTERVAL_MS);
+    this.exactTimer = setInterval(() => this.fetchExactContexts(), EXACT_QUERY_INTERVAL_MS);
   }
 
   stop() {
@@ -97,10 +106,7 @@ export class ContextScanner {
         if (sessionName) {
           this.sm.sessions[targetId].sessionName = sessionName;
         } else if (!this.namedSessions.has(sessionId)) {
-          const autoName = await this.autoNameSession(
-            path.join(sessionsDir, file),
-            jsonlPath,
-          );
+          const autoName = await this.autoNameSession(path.join(sessionsDir, file), jsonlPath);
           if (autoName) {
             this.sm.sessions[targetId].sessionName = autoName;
             this.namedSessions.add(sessionId);
@@ -113,8 +119,8 @@ export class ContextScanner {
           this.sm.sessions[targetId].agentColor = info.agentColor;
         } else if (!this.coloredSessions.has(sessionId)) {
           // Auto-set color to match buddy's identity color
-          const suffix = this.sm.sessions[targetId].gitWorktree
-            ?? this.sm.sessions[targetId].gitBranch ?? "";
+          const suffix =
+            this.sm.sessions[targetId].gitWorktree ?? this.sm.sessions[targetId].gitBranch ?? "";
           const buddyColor = hashToClaudeColor(
             this.sm.sessions[targetId].workingDirectory + suffix,
           );
@@ -165,7 +171,7 @@ export class ContextScanner {
     try {
       const handle = await fs.open(jsonlPath, "r");
       const stat = await handle.stat();
-      const readSize = Math.min(stat.size, 65536);
+      const readSize = Math.min(stat.size, TAIL_READ_BYTES);
       const buf = Buffer.alloc(readSize);
       await handle.read(buf, 0, readSize, stat.size - readSize);
       await handle.close();
@@ -204,10 +210,13 @@ export class ContextScanner {
         if (rawTotal > 0) {
           const maxCtx = maxTokens(info.model ?? "");
           if (rawTotal <= maxCtx) {
-            info.estimatedContext = Math.floor(rawTotal * 0.85);
+            info.estimatedContext = Math.floor(rawTotal * ESTIMATION_RATIO);
           } else {
             const overRatio = rawTotal / maxCtx;
-            const fillPercent = Math.max(0.3, Math.min(0.7, 1.0 / overRatio + 0.08));
+            const fillPercent = Math.max(
+              MIN_FILL_PERCENT,
+              Math.min(MAX_FILL_PERCENT, 1.0 / overRatio + OVER_RATIO_OFFSET),
+            );
             info.estimatedContext = Math.floor(maxCtx * fillPercent);
           }
         }
@@ -224,7 +233,7 @@ export class ContextScanner {
     try {
       const handle = await fs.open(jsonlPath, "r");
       const stat = await handle.stat();
-      const readSize = Math.min(stat.size, 65536);
+      const readSize = Math.min(stat.size, TAIL_READ_BYTES);
       const buf = Buffer.alloc(readSize);
       await handle.read(buf, 0, readSize, stat.size - readSize);
       await handle.close();
@@ -256,16 +265,42 @@ export class ContextScanner {
 
   private async autoNameSession(metaPath: string, jsonlPath: string): Promise<string | undefined> {
     const STOP_WORDS = new Set([
-      "i", "want", "to", "a", "the", "can", "you", "please", "me", "help",
-      "with", "this", "my", "for", "in", "on", "is", "it", "do", "an",
-      "of", "and", "that", "be", "have", "we", "need", "would", "like",
+      "i",
+      "want",
+      "to",
+      "a",
+      "the",
+      "can",
+      "you",
+      "please",
+      "me",
+      "help",
+      "with",
+      "this",
+      "my",
+      "for",
+      "in",
+      "on",
+      "is",
+      "it",
+      "do",
+      "an",
+      "of",
+      "and",
+      "that",
+      "be",
+      "have",
+      "we",
+      "need",
+      "would",
+      "like",
     ]);
 
     let text: string;
     try {
       const handle = await fs.open(jsonlPath, "r");
-      const buf = Buffer.alloc(8192);
-      const { bytesRead } = await handle.read(buf, 0, 8192, 0);
+      const buf = Buffer.alloc(HEAD_READ_BYTES);
+      const { bytesRead } = await handle.read(buf, 0, HEAD_READ_BYTES, 0);
       await handle.close();
       text = buf.toString("utf-8", 0, bytesRead);
     } catch {
@@ -304,10 +339,7 @@ export class ContextScanner {
         .map((w) => w.toLowerCase());
 
       const meaningful = words.filter((w) => !STOP_WORDS.has(w));
-      const slug = (meaningful.length >= 2 ? meaningful : words)
-        .slice(0, 5)
-        .join("-")
-        .slice(0, 50);
+      const slug = (meaningful.length >= 2 ? meaningful : words).slice(0, 5).join("-").slice(0, 50);
 
       if (!slug) continue;
 
@@ -409,9 +441,7 @@ function maxTokens(model: string): number {
 }
 
 // Claude Code /color accepts: red, blue, green, yellow, purple, orange, pink, cyan
-const CLAUDE_COLORS = [
-  "green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red",
-];
+const CLAUDE_COLORS = ["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
 
 function djb2(s: string): number {
   let h = 5381;

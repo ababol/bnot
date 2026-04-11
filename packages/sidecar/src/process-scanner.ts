@@ -6,6 +6,10 @@ const exec = promisify(execFile);
 
 import type { SessionMode } from "./types.js";
 
+const SCAN_INTERVAL_MS = 2000;
+const CPU_ACTIVE_THRESHOLD = 2.0;
+const COMPLETION_DELAY_MS = 5000;
+
 interface ProcessInfo {
   pid: number;
   parentPid: number;
@@ -31,7 +35,7 @@ export class ProcessScanner {
 
   start() {
     this.scan();
-    this.timer = setInterval(() => this.scan(), 2000);
+    this.timer = setInterval(() => this.scan(), SCAN_INTERVAL_MS);
   }
 
   stop() {
@@ -67,8 +71,8 @@ export class ProcessScanner {
       }
       // Update live fields (not lastActivity)
       // Detect idle→working transition to track current task duration
-      const wasIdle = this.sm.sessions[sessionId].cpuPercent < 2.0;
-      const isWorking = info.cpuPercent >= 2.0;
+      const wasIdle = this.sm.sessions[sessionId].cpuPercent < CPU_ACTIVE_THRESHOLD;
+      const isWorking = info.cpuPercent >= CPU_ACTIVE_THRESHOLD;
       if (wasIdle && isWorking) {
         this.sm.sessions[sessionId].taskStartedAt = Date.now();
       } else if (!isWorking) {
@@ -105,7 +109,7 @@ export class ProcessScanner {
           delete this.sm.sessions[id];
           this.pendingDeletions.delete(id);
           this.sm.emitUpdate();
-        }, 5000);
+        }, COMPLETION_DELAY_MS);
       }
     }
 
@@ -172,7 +176,7 @@ export class ProcessScanner {
       (best, s) => (s.cpuPercent > (best?.cpuPercent ?? 0) ? s : best),
       null as (typeof active)[0] | null,
     );
-    if (busiest && busiest.cpuPercent > 2.0) {
+    if (busiest && busiest.cpuPercent > CPU_ACTIVE_THRESHOLD) {
       this.sm.heroSessionId = busiest.id;
       return;
     }
@@ -320,7 +324,13 @@ export class ProcessScanner {
 
   private async getGitBranch(cwd: string): Promise<string | null> {
     try {
-      const { stdout } = await exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"]);
+      const { stdout } = await exec("/usr/bin/git", [
+        "-C",
+        cwd,
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD",
+      ]);
       const branch = stdout.trim();
       return branch || null;
     } catch {
@@ -334,13 +344,19 @@ export class ProcessScanner {
     try {
       const [gitDir, commonDir] = await Promise.all([
         exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-dir"]).then((r) => r.stdout.trim()),
-        exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-common-dir"]).then((r) => r.stdout.trim()),
+        exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-common-dir"]).then((r) =>
+          r.stdout.trim(),
+        ),
       ]);
       // If they differ, this is a worktree
       if (gitDir !== commonDir) {
         const worktree = cwd.split("/").pop() ?? cwd;
         // commonDir is like /path/to/repo/.git — repo name is parent dir
-        const repoName = commonDir.replace(/\/\.git$/, "").split("/").pop() ?? worktree;
+        const repoName =
+          commonDir
+            .replace(/\/\.git$/, "")
+            .split("/")
+            .pop() ?? worktree;
         return { worktree, repoName };
       }
     } catch {

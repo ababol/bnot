@@ -1,6 +1,8 @@
 import { emit } from "./ipc.js";
 import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
 
+const DEBOUNCE_MS = 50;
+const PANEL_RESET_DELAY_MS = 6000;
 const DANGEROUS_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"]);
 
 export class SessionManager {
@@ -18,7 +20,7 @@ export class SessionManager {
         sessions: this.sessions,
         heroId: this.heroSessionId,
       });
-    }, 50);
+    }, DEBOUNCE_MS);
   }
 
   handleMessage(msg: SocketMessage, clientFd: number) {
@@ -115,7 +117,7 @@ export class SessionManager {
           emit("panelStateChange", { state: "jump", sessionId });
           setTimeout(() => {
             emit("panelStateChange", { state: "compact" });
-          }, 6000);
+          }, PANEL_RESET_DELAY_MS);
         }
         break;
       }
@@ -133,7 +135,7 @@ export class SessionManager {
           emit("panelStateChange", { state: "compact" });
           delete this.sessions[sessionId];
           this.emitUpdate();
-        }, 6000);
+        }, PANEL_RESET_DELAY_MS);
         break;
       }
 

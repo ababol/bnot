@@ -1,12 +1,13 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { detectRunningTerminal } from "./terminal-jumper.js";
+import { escapeForAppleScript, escapeShell } from "./terminal-utils.js";
 
 const exec = promisify(execFile);
 
 export async function resumeSession(sessionId: string, projectPath: string): Promise<void> {
   const terminal = (await detectRunningTerminal()).toLowerCase();
-  const escapedPath = projectPath.replace(/'/g, "'\\''");
+  const escapedPath = escapeShell(projectPath);
   const command = `cd '${escapedPath}' && claude --resume ${sessionId}`;
 
   if (terminal.includes("iterm")) {
@@ -20,7 +21,7 @@ export async function resumeSession(sessionId: string, projectPath: string): Pro
 }
 
 async function launchInITerm(command: string) {
-  const escaped = command.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const escaped = escapeForAppleScript(command);
   const script = `
 tell application "iTerm2"
   activate
@@ -35,7 +36,7 @@ end tell`;
 }
 
 async function launchInGhostty(command: string) {
-  const escaped = command.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const escaped = escapeForAppleScript(command);
   const script = `
 tell application "Ghostty"
   activate

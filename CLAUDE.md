@@ -1,11 +1,5 @@
 # CLAUDE.md — BuddyNotch
 
-## Project Overview
-
-BuddyNotch is a macOS notch-panel app that monitors Claude Code sessions. It lives in the MacBook notch area as a pixel-art buddy character that shows context usage, session count, and lets you jump to specific terminal tabs/panes.
-
-Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4 + Node.js sidecar.
-
 ## Build & Run
 
 ```bash
@@ -19,65 +13,101 @@ Requires: macOS 14+, Rust (rustup), Node.js 22+, pnpm.
 
 ## Project Structure
 
-Monorepo with pnpm workspaces:
-
 ```
 buddynotch/
   apps/
-    desktop/            # Tauri Rust core (window, keyboard, notch detection)
+    desktop/            # Tauri v2 Rust core
       src/              # lib.rs, commands.rs, window.rs, notch.rs, keyboard.rs, sidecar.rs, tray.rs
-      tauri.conf.json
-      Cargo.toml
-    web/                # React + TypeScript + Tailwind frontend
+    web/                # React 19 + TypeScript + Tailwind v4 frontend
       src/
-        components/     # notch-content, compact-view, overview-view, session-card, etc.
-        context/        # session-context.tsx (useReducer), types.ts
-        hooks/          # use-tauri-events.ts, use-sound.ts
-        lib/            # colors.ts
-      index.html
-      vite.config.ts
-      tsconfig.json
-      package.json
+        components/     # notch-content, compact-view, overview-view, session-card, pixel-buddy, etc.
+        context/        # session-context.tsx (useReducer + Context), types.ts
+        hooks/          # use-tauri-events.ts, use-timer.ts, use-hero-session.ts
+        lib/            # colors.ts, format.ts, tauri.ts
   packages/
     sidecar/            # Node.js sidecar (process scanning, session mgmt, socket server)
-      src/              # index.ts, process-scanner.ts, context-scanner.ts, session-manager.ts, etc.
-      package.json
+      src/              # index.ts, process-scanner.ts, context-scanner.ts, session-manager.ts,
+                        # paths.ts, terminal-utils.ts, terminal-jumper.ts, ghostty-tab-mapper.ts,
+                        # socket-server.ts, hook-installer.ts, history-scanner.ts, repo-finder.ts,
+                        # worktree-creator.ts, session-launcher.ts, userscript-installer.ts, ipc.ts, types.ts
     bridge/             # Rust CLI binary (Claude Code hook handler)
       src/              # main.rs, hook_input.rs
-      Cargo.toml
-  Cargo.toml            # Rust workspace (apps/desktop + packages/bridge)
-  pnpm-workspace.yaml   # pnpm workspaces (apps/*, packages/*)
-  package.json          # Root scripts (pnpm dev/build/format)
 ```
+
+## Architecture
+
+### Data Flow
+
+```
+Claude Code hooks → buddy-bridge (Rust CLI) → Unix socket → Sidecar
+Sidecar → stdout NDJSON events → Tauri Rust → app.emit() → React frontend
+React → invoke() → Tauri commands → Sidecar stdin NDJSON requests
+```
+
+### Panel States
+
+5 states managed by `SessionContext` reducer: `compact`, `overview`, `approval`, `ask`, `jump`.
+
+State changes always go through `setPanelState(dispatch, state)` in `lib/tauri.ts`, which dispatches to React and invokes the Rust backend in one call.
+
+### Tauri Commands (commands.rs)
+
+`get_notch_geometry`, `set_panel_state`, `jump_to_session`, `approve_session`, `deny_session`, `resume_session`, `send_goto_tab`, `navigate_pane`, `activate_app`.
+
+### Sidecar IPC Methods (index.ts)
+
+`getStatus`, `jumpToSession`, `approveSession`, `denySession`, `openWorktree`, `resumeSession`.
+
+### Key Session Fields (types.ts)
+
+`id`, `status` (active/waitingApproval/waitingAnswer/completed/error), `workingDirectory`, `contextTokens`, `maxContextTokens`, `cpuPercent`, `gitBranch?`, `gitWorktree?`, `sessionMode?` (normal/plan/auto/dangerous), `agentColor?`.
 
 ## Architecture Decisions
 
 **DO use LogicalPosition/LogicalSize for Tauri window positioning** — Retina 2x displays halve PhysicalPosition values.
 
-**DO use NSAnimationContext for panel transitions** — `window.animator().setFrame()` with 0.2s ease-out in `window.rs`. Don't use Tauri's `set_position`/`set_size` for state transitions (no animation).
+**DO use NSAnimationContext for panel transitions** — `window.rs::animate_frame()` with `ANIMATION_DURATION` (0.2s ease-out). Don't use Tauri's `set_position`/`set_size` for state transitions (no animation).
 
-**DO swizzle `acceptsFirstMouse:` on the webview** — Tauri's NSWindow requires focus before passing clicks. Swizzling the content view hierarchy to return YES makes it single-click like the original NSPanel. See `window.rs::swizzle_accepts_first_mouse`.
+**DO swizzle `acceptsFirstMouse:` on the webview** — Tauri's NSWindow requires focus before passing clicks. `window.rs::swizzle_accepts_first_mouse` swizzles WKWebView and its internal views to return YES.
 
 **DO NOT use `setFloatingPanel` on Tauri windows** — Tauri's NSWindow doesn't respond to NSPanel methods. Use `msg_send!` for `setLevel`, `setCollectionBehavior`, `setHidesOnDeactivate` only.
 
 **DO NOT update `lastActivity` in ProcessScanner** — Only hooks and initial session creation should set it.
 
-**DO copy `tty`/`processPid`/`cpuPercent` during dedup** — Surviving session MUST have process info or tab jumping won't work.
+**DO copy `tty`/`processPid`/`cpuPercent` during dedup** — Surviving session must have process info or tab jumping won't work.
 
-**DO use CGEvent for Ghostty navigation** — `Cmd+N` (goto_tab) and `Cmd+]` (goto_split:next) via CGEvent. AppleScript is too slow.
+**DO use Ghostty's native AppleScript API** for terminal focus — `ghostty-tab-mapper.ts` uses `focus` command + TTY marker. CGEvent/Accessibility approaches are too slow.
 
-**DO NOT iterate Ghostty tabs in background** — Only probe on-demand (user clicks a session row).
-
-**DO make sidecar spawning non-fatal** — If npx/tsx isn't found, the app still renders without session data.
+**DO make sidecar spawning non-fatal** — If node/npx isn't found, the app still renders without session data.
 
 **DO use `pnpm dev` for development** — Runs `tauri dev` from root which starts Vite dev server + Rust build. The raw debug binary doesn't properly serve the embedded frontend.
+
+## Shared Utilities
+
+**`lib/tauri.ts`** — `setPanelState()` and `jumpToSession()`. All panel state changes must use `setPanelState` to keep React and Rust in sync.
+
+**`lib/format.ts`** — `formatElapsed()`, `formatIdle()`, `formatRelativeTime()`, `shortenPath()`, `tokenShort()`. All time/path/token formatting lives here.
+
+**`lib/colors.ts`** — `sessionStatusColor()` maps status+cpu to BuddyColor. `parseBuddyColor()` validates strings from the backend. `buddyTraitsFromId()` generates deterministic buddy appearance from hash.
+
+**`context/types.ts`** — `directoryName()`, `isIdle()`, `projectName()`, `contextPercent()`. Derived helpers for session data.
+
+**`packages/sidecar/src/paths.ts`** — `CLAUDE_DIR`, `RUNTIME_DIR`, `CONFIG_PATH`, `SOCKET_PATH`, `PID_PATH`. All shared paths.
+
+**`packages/sidecar/src/terminal-utils.ts`** — `escapeForAppleScript()`, `escapeShell()`. All string escaping for shell/AppleScript.
 
 ## Tailwind CSS v4
 
 - Plugin: `@tailwindcss/vite` in `apps/web/vite.config.ts`
 - CSS entry: `apps/web/src/index.css` with `@import "tailwindcss"` + `@theme` block
 - Custom tokens: `--color-buddy-green`, `--color-surface`, `--color-text-dim`, etc.
-- Do NOT add `* { margin: 0; padding: 0; }` outside Tailwind layers — it overrides utility classes. Tailwind's preflight handles the reset.
+- Do NOT add `* { margin: 0; padding: 0; }` outside Tailwind layers — it overrides utility classes.
+
+## TypeScript
+
+- Strict mode with `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`
+- Target: ES2021, JSX: react-jsx, module resolution: bundler
+- Reducer exhaustiveness enforced via `satisfies never`
 
 ## IPC Protocol
 
@@ -93,23 +123,22 @@ Sidecar -> Tauri:  {"event":"tauriCommand", "data":{"method":"activate_app", "pa
 
 ## Claude Code Hooks
 
-Auto-installed to `~/.claude/settings.json` on startup via `packages/sidecar/src/hook-installer.ts`:
+Auto-installed to `~/.claude/settings.json` on startup via `hook-installer.ts`. Bridge binary reads hook JSON from stdin, sends NDJSON to `~/.buddy-notch/buddy.sock`, exits 0.
 
-```json
-{"matcher": "", "hooks": [{"type": "command", "command": "/path/to/buddy-bridge pre-tool"}]}
-```
-
-Bridge binary reads hook JSON from stdin, sends NDJSON to `~/.buddy-notch/buddy.sock`, exits 0.
+For dangerous tools (Bash, Edit, Write, NotebookEdit, MultiEdit), bridge blocks and waits for approval response from sidecar (120s timeout). For safe tools, it's fire-and-forget.
 
 ## Context Token Estimation
 
-Fast path (3s): `raw_total * 0.85` or `max_context * (1/over_ratio + 0.08)` for autocompacted.
+Fast path (3s): `raw_total * ESTIMATION_RATIO` or `max_context * fillPercent` for autocompacted sessions.
 Exact query (60s): `claude --print "/context" --resume <id>`.
+
+Constants in `context-scanner.ts`: `ESTIMATION_RATIO=0.85`, `OVER_RATIO_OFFSET=0.08`, `MIN_FILL_PERCENT=0.3`, `MAX_FILL_PERCENT=0.7`.
 
 ## Runtime Files
 
 - `~/.buddy-notch/buddy.sock` — Unix domain socket (sidecar <-> bridge)
 - `~/.buddy-notch/buddy.pid` — PID file
+- `~/.buddy-notch/config.json` — Project directories config
 - `~/.claude/settings.json` — Claude Code hooks
 - `~/.claude/sessions/*.json` — Session metadata
 - `~/.claude/projects/<key>/<sessionId>.jsonl` — Conversation data

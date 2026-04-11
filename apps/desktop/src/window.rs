@@ -1,10 +1,13 @@
 use crate::notch::NotchGeometry;
 use tauri::{Runtime, WebviewWindow};
 
+const COMPACT_SIDE_EXTENSION: f64 = 36.0;
+const ANIMATION_DURATION: f64 = 0.2;
+const WINDOW_LEVEL_ABOVE_STATUS: i64 = 26; // CGWindowLevelForKey(.statusWindow) + 1
+
 /// Compact frame: returns (x, width, height) in logical points.
 pub fn compact_frame(geom: &NotchGeometry) -> (f64, f64, f64) {
-    let side_ext = 36.0;
-    let w = geom.notch_width + side_ext * 2.0;
+    let w = geom.notch_width + COMPACT_SIDE_EXTENSION * 2.0;
     let h = geom.notch_height;
     let x = geom.center_x - w / 2.0;
     (x, w, h)
@@ -30,6 +33,12 @@ pub fn expanded_frame(state: &str, geom: &NotchGeometry) -> (f64, f64, f64, f64)
     (x, 0.0, w, h)
 }
 
+#[cfg(target_os = "macos")]
+fn get_ns_window<R: Runtime>(window: &WebviewWindow<R>) -> Option<objc2::rc::Retained<objc2::runtime::AnyObject>> {
+    let raw = window.ns_window().ok()? as *mut objc2::runtime::AnyObject;
+    unsafe { objc2::rc::Retained::retain(raw) }
+}
+
 /// Animate the window frame transition using NSAnimationContext.
 pub fn animate_frame<R: Runtime>(window: &WebviewWindow<R>, x: f64, y: f64, w: f64, h: f64) {
     #[cfg(target_os = "macos")]
@@ -38,11 +47,7 @@ pub fn animate_frame<R: Runtime>(window: &WebviewWindow<R>, x: f64, y: f64, w: f
         use objc2::runtime::AnyObject;
         use objc2_foundation::{NSPoint, NSRect, NSSize};
 
-        let raw = match window.ns_window() {
-            Ok(ptr) => ptr as *mut AnyObject,
-            Err(_) => return,
-        };
-        let Some(ns_window) = (unsafe { Retained::retain(raw) }) else {
+        let Some(ns_window) = get_ns_window(window) else {
             return;
         };
 
@@ -63,7 +68,7 @@ pub fn animate_frame<R: Runtime>(window: &WebviewWindow<R>, x: f64, y: f64, w: f
 
             let ctx: Retained<AnyObject> =
                 objc2::msg_send_id![objc2::class!(NSAnimationContext), currentContext];
-            let _: () = objc2::msg_send![&*ctx, setDuration: 0.2f64];
+            let _: () = objc2::msg_send![&*ctx, setDuration: ANIMATION_DURATION];
 
             let timing_name = objc2_foundation::NSString::from_str("easeOut");
             let timing: Retained<AnyObject> = objc2::msg_send_id![
@@ -88,14 +93,7 @@ pub fn animate_frame<R: Runtime>(window: &WebviewWindow<R>, x: f64, y: f64, w: f
 pub fn make_key_window<R: Runtime>(window: &WebviewWindow<R>) {
     #[cfg(target_os = "macos")]
     {
-        use objc2::rc::Retained;
-        use objc2::runtime::AnyObject;
-
-        let raw = match window.ns_window() {
-            Ok(ptr) => ptr as *mut AnyObject,
-            Err(_) => return,
-        };
-        let Some(ns_window) = (unsafe { Retained::retain(raw) }) else {
+        let Some(ns_window) = get_ns_window(window) else {
             return;
         };
         unsafe {
@@ -111,14 +109,7 @@ pub fn make_key_window<R: Runtime>(window: &WebviewWindow<R>) {
 pub fn show_without_activation<R: Runtime>(window: &WebviewWindow<R>) {
     #[cfg(target_os = "macos")]
     {
-        use objc2::rc::Retained;
-        use objc2::runtime::AnyObject;
-
-        let raw = match window.ns_window() {
-            Ok(ptr) => ptr as *mut AnyObject,
-            Err(_) => return,
-        };
-        let Some(ns_window) = (unsafe { Retained::retain(raw) }) else {
+        let Some(ns_window) = get_ns_window(window) else {
             return;
         };
         unsafe {
@@ -135,30 +126,18 @@ pub fn show_without_activation<R: Runtime>(window: &WebviewWindow<R>) {
 pub fn configure_macos_window<R: Runtime>(window: &WebviewWindow<R>) {
     #[cfg(target_os = "macos")]
     {
-        use objc2::rc::Retained;
-        use objc2::runtime::{AnyClass, AnyObject, Bool, Sel};
         use objc2::MainThreadMarker;
         use objc2_app_kit::{
             NSApplication, NSApplicationActivationPolicy, NSWindowCollectionBehavior,
         };
 
-        let raw = match window.ns_window() {
-            Ok(ptr) => ptr as *mut AnyObject,
-            Err(e) => {
-                eprintln!("[window] Failed to get ns_window: {e}");
-                return;
-            }
-        };
-
-        let Some(ns_window) = (unsafe { Retained::retain(raw) }) else {
+        let Some(ns_window) = get_ns_window(window) else {
             eprintln!("[window] ns_window pointer was null");
             return;
         };
 
         unsafe {
-            // Window level: above status window (CGWindowLevelForKey(.statusWindow) = 25)
-            let level: i64 = 25 + 1;
-            let _: () = objc2::msg_send![&ns_window, setLevel: level];
+            let _: () = objc2::msg_send![&ns_window, setLevel: WINDOW_LEVEL_ABOVE_STATUS];
 
             // Collection behavior
             let behavior = NSWindowCollectionBehavior::CanJoinAllSpaces

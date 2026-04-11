@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useSession } from "../context/session-context";
+import { jumpToSession, setPanelState } from "../lib/tauri";
 
 interface Props {
   notchHeight: number;
@@ -13,10 +13,7 @@ export default function AskView({ notchHeight }: Props) {
   );
   const question = session?.pendingQuestion;
 
-  const close = () => {
-    dispatch({ type: "SET_PANEL_STATE", panelState: "compact" });
-    invoke("set_panel_state", { state: "compact" });
-  };
+  const close = () => setPanelState(dispatch, "compact");
 
   if (!session || !question) {
     close();
@@ -37,18 +34,17 @@ export default function AskView({ notchHeight }: Props) {
       <div className="mb-3 text-[13px] text-white/90">{question.question}</div>
 
       {/* Options */}
-      {question.options.map((option, i) => (
+      {question.options.map((option) => (
         <button
-          key={i}
+          key={option}
           onClick={() => {
-            if (session) invoke("jump_to_session", { sessionId: session.id });
+            if (session) jumpToSession(session.id);
             close();
           }}
           className="mb-1.5 flex w-full cursor-pointer items-center gap-2 rounded-lg border-none bg-surface px-2.5 py-2 text-left text-xs text-white hover:bg-surface-hover"
         >
           <span className="w-7 shrink-0 font-mono text-[10px] font-bold text-buddy-cyan/60">
             {"\u2318"}
-            {i + 1}
           </span>
           {option}
         </button>

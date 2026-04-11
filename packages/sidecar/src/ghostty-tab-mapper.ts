@@ -1,5 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { escapeForAppleScript } from "./terminal-utils.js";
 
 const exec = promisify(execFile);
 
@@ -103,8 +104,4 @@ end tell`;
   } catch {
     return false;
   }
-}
-
-function escapeForAppleScript(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }

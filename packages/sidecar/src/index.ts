@@ -11,14 +11,41 @@ import { jumpToSession } from "./terminal-jumper.js";
 import { promptUserscriptInstall } from "./userscript-installer.js";
 import { WorktreeCreator } from "./worktree-creator.js";
 
-const sm = new SessionManager();
+function requireParam(params: Record<string, unknown> | undefined, key: string): string {
+  const val = params?.[key];
+  if (typeof val !== "string" || !val) {
+    throw new Error(`Missing required parameter: ${key}`);
+  }
+  return val;
+}
+
+function resolveApproval(
+  sessionManager: SessionManager,
+  socketServer: SocketServer,
+  sessionId: string,
+  action: "allow" | "deny",
+) {
+  const clientFd = sessionManager.pendingApprovalClients[sessionId];
+  if (clientFd !== undefined) {
+    socketServer.sendResponse({ action }, clientFd);
+    if (sessionManager.sessions[sessionId]) {
+      sessionManager.sessions[sessionId].pendingApproval = undefined;
+      sessionManager.sessions[sessionId].status = "active";
+    }
+    delete sessionManager.pendingApprovalClients[sessionId];
+    emit("panelStateChange", { state: "compact" });
+    sessionManager.emitUpdate();
+  }
+}
+
+const sessionManager = new SessionManager();
 const repoFinder = new RepoFinder();
 const worktreeCreator = new WorktreeCreator(repoFinder);
 const socketServer = new SocketServer((msg, clientFd) => {
-  sm.handleMessage(msg, clientFd);
+  sessionManager.handleMessage(msg, clientFd);
 });
-const processScanner = new ProcessScanner(sm);
-const contextScanner = new ContextScanner(sm);
+const processScanner = new ProcessScanner(sessionManager);
+const contextScanner = new ContextScanner(sessionManager);
 const historyScanner = new HistoryScanner();
 
 // Handle IPC requests from Tauri
@@ -26,13 +53,13 @@ onRequest(async (method, params) => {
   switch (method) {
     case "getStatus":
       return {
-        sessions: sm.sessions,
-        heroId: sm.heroSessionId,
+        sessions: sessionManager.sessions,
+        heroId: sessionManager.heroSessionId,
       };
 
     case "jumpToSession": {
-      const sessionId = params?.sessionId as string;
-      const session = sm.sessions[sessionId];
+      const sessionId = requireParam(params, "sessionId");
+      const session = sessionManager.sessions[sessionId];
       if (session) {
         jumpToSession(session);
       }
@@ -40,51 +67,31 @@ onRequest(async (method, params) => {
     }
 
     case "approveSession": {
-      const sessionId = params?.sessionId as string;
-      const clientFd = sm.pendingApprovalClients[sessionId];
-      if (clientFd !== undefined) {
-        socketServer.sendResponse({ action: "allow" }, clientFd);
-        if (sm.sessions[sessionId]) {
-          sm.sessions[sessionId].pendingApproval = undefined;
-          sm.sessions[sessionId].status = "active";
-        }
-        delete sm.pendingApprovalClients[sessionId];
-        emit("panelStateChange", { state: "compact" });
-        sm.emitUpdate();
-      }
+      const sessionId = requireParam(params, "sessionId");
+      resolveApproval(sessionManager, socketServer, sessionId, "allow");
       return { success: true };
     }
 
     case "denySession": {
-      const sessionId = params?.sessionId as string;
-      const clientFd = sm.pendingApprovalClients[sessionId];
-      if (clientFd !== undefined) {
-        socketServer.sendResponse({ action: "deny" }, clientFd);
-        if (sm.sessions[sessionId]) {
-          sm.sessions[sessionId].pendingApproval = undefined;
-          sm.sessions[sessionId].status = "active";
-        }
-        delete sm.pendingApprovalClients[sessionId];
-        emit("panelStateChange", { state: "compact" });
-        sm.emitUpdate();
-      }
+      const sessionId = requireParam(params, "sessionId");
+      resolveApproval(sessionManager, socketServer, sessionId, "deny");
       return { success: true };
     }
 
     case "openWorktree": {
       const result = await worktreeCreator.open({
-        owner: params?.owner as string,
-        repo: params?.repo as string,
-        branch: params?.branch as string,
-        headOwner: params?.headOwner as string,
-        headRepo: params?.headRepo as string,
+        owner: requireParam(params, "owner"),
+        repo: requireParam(params, "repo"),
+        branch: requireParam(params, "branch"),
+        headOwner: requireParam(params, "headOwner"),
+        headRepo: requireParam(params, "headRepo"),
       });
       return result;
     }
 
     case "resumeSession": {
-      const sessionId = params?.sessionId as string;
-      const projectPath = params?.projectPath as string;
+      const sessionId = requireParam(params, "sessionId");
+      const projectPath = requireParam(params, "projectPath");
       await resumeSession(sessionId, projectPath);
       return { success: true };
     }
@@ -95,12 +102,14 @@ onRequest(async (method, params) => {
 });
 
 // Startup
-repoFinder.scan().catch((e) => process.stderr.write(`[repo-finder] initial scan error: ${e}\n`));
+repoFinder
+  .scan()
+  .catch((err) => process.stderr.write(`[repo-finder] initial scan error: ${err}\n`));
 socketServer.start();
 processScanner.start();
 contextScanner.start();
 historyScanner.start();
-installHooksIfNeeded().catch((e) => process.stderr.write(`[hookInstaller] error: ${e}\n`));
+installHooksIfNeeded().catch((err) => process.stderr.write(`[hookInstaller] error: ${err}\n`));
 promptUserscriptInstall();
 
 // Heartbeat
@@ -109,20 +118,15 @@ setInterval(() => {
 }, 5000);
 
 // Cleanup on exit
-process.on("SIGTERM", () => {
+function cleanup() {
   processScanner.stop();
   contextScanner.stop();
   historyScanner.stop();
   socketServer.stop();
   process.exit(0);
-});
+}
 
-process.on("SIGINT", () => {
-  processScanner.stop();
-  contextScanner.stop();
-  historyScanner.stop();
-  socketServer.stop();
-  process.exit(0);
-});
+process.on("SIGTERM", cleanup);
+process.on("SIGINT", cleanup);
 
 process.stderr.write("[sidecar] started\n");

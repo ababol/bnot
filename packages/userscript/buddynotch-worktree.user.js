@@ -15,9 +15,7 @@
 
   function getPRMetadata() {
     // Base owner/repo from the URL: /owner/repo/pull/123
-    const urlMatch = location.pathname.match(
-      /\/([^/]+)\/([^/]+)\/pull\/(\d+)/,
-    );
+    const urlMatch = location.pathname.match(/\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
     if (!urlMatch) return null;
 
     const [, owner, repo] = urlMatch;
@@ -25,9 +23,7 @@
     // Head branch: find the last branch-name link with /tree/ in its href.
     // GitHub's PR header has two branch refs: base (into) and head (from).
     // The head branch link contains /tree/<branch> and lives after the "from" text.
-    const branchLinks = document.querySelectorAll(
-      'a[class*="BranchName"][href*="/tree/"]',
-    );
+    const branchLinks = document.querySelectorAll('a[class*="BranchName"][href*="/tree/"]');
 
     // The last matching link is the head branch
     const headLink = branchLinks[branchLinks.length - 1];
@@ -113,9 +109,7 @@
     // Find the head branch area. Look for the last BranchName link,
     // then insert our button next to its parent container
     // (which includes the copy-to-clipboard button).
-    const branchLinks = document.querySelectorAll(
-      'a[class*="BranchName"][href*="/tree/"]',
-    );
+    const branchLinks = document.querySelectorAll('a[class*="BranchName"][href*="/tree/"]');
     const headLink = branchLinks[branchLinks.length - 1];
     if (!headLink) return;
 
