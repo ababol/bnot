@@ -9,6 +9,7 @@ import { buddyTraitsFromId, MAIN_COLORS, parseBuddyColor, sessionStatusDot } fro
 import { setPanelState } from "../lib/tauri";
 import PixelBell from "./pixel-bell";
 import PixelBuddy from "./pixel-buddy";
+import StatusIndicator from "./status-indicator";
 
 interface Props {
   notchWidth: number;
@@ -89,15 +90,9 @@ export default function CompactView({ notchWidth }: Props) {
         {isJump ? (
           <span className="text-base text-buddy-green">&#x2713;</span>
         ) : (
-          <div className="flex items-center gap-1">
-            <PixelBuddy
-              color={heroColor}
-              isActive={heroIsWorking}
-              traits={heroTraits}
-              dot={heroDot}
-            />
+          <div className="flex items-center">
             {heroSession && (
-              <div className="relative h-[14px] w-[4px] overflow-hidden rounded-sm bg-white/10">
+              <div className="relative mr-0.5 h-[18px] w-[5px] overflow-hidden rounded-sm bg-white/10">
                 <div
                   className="absolute bottom-0 w-full rounded-sm"
                   style={{
@@ -105,6 +100,12 @@ export default function CompactView({ notchWidth }: Props) {
                     backgroundColor: MAIN_COLORS[barColor],
                   }}
                 />
+              </div>
+            )}
+            <PixelBuddy color={heroColor} isActive={heroIsWorking} traits={heroTraits} size="lg" />
+            {heroDot && (
+              <div className="ml-0.5">
+                <StatusIndicator dot={heroDot} size="lg" />
               </div>
             )}
           </div>

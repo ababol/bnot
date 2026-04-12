@@ -124,12 +124,13 @@ export function parseBuddyColor(value: string | undefined): BuddyColor | undefin
 
 // --- Status dot ---
 
-export type StatusDot = "working" | "planning" | "waiting" | "idle";
+export type StatusDot = "working" | "planning" | "waiting" | "done" | "idle";
 
 export const STATUS_DOT_COLORS: Record<StatusDot, string> = {
-  working: "rgb(74, 222, 128)", // green
+  working: "rgb(97, 166, 250)", // blue
   planning: "rgb(97, 212, 222)", // cyan
   waiting: "rgb(250, 173, 87)", // orange
+  done: "rgb(74, 222, 128)", // green
   idle: "rgb(120, 120, 130)", // gray
 };
 
@@ -139,6 +140,7 @@ export function sessionStatusDot(
   sessionMode?: string,
 ): StatusDot {
   if (status === "waitingApproval" || status === "waitingAnswer") return "waiting";
+  if (status === "completed") return "done";
   if (sessionMode === "plan") return "planning";
   if (isWorking) return "working";
   return "idle";

@@ -21,6 +21,7 @@ import DiffView, { diffStats } from "./diff-view";
 import PixelBell from "./pixel-bell";
 import PixelBuddy from "./pixel-buddy";
 import PixelProgressBar from "./pixel-progress-bar";
+import StatusIndicator from "./status-indicator";
 
 interface Props {
   session: AgentSession;
@@ -111,7 +112,8 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     >
       {/* Top row */}
       <div className="flex items-center gap-1.5">
-        <PixelBuddy color={buddyColor} isActive={working} traits={traits} dot={dot} />
+        <PixelBuddy color={buddyColor} isActive={working} traits={traits} />
+        <StatusIndicator dot={dot} size="sm" />
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-white">
           {session.sessionName ?? session.taskName ?? dirName}
         </div>

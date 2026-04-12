@@ -1,7 +1,7 @@
 use crate::notch::NotchGeometry;
 use tauri::{AppHandle, Emitter, Runtime, WebviewWindow};
 
-const COMPACT_SIDE_EXTENSION: f64 = 36.0;
+const COMPACT_SIDE_EXTENSION: f64 = 68.0;
 const ANIMATION_DURATION: f64 = 0.2;
 const WINDOW_LEVEL_ABOVE_STATUS: i64 = 26; // CGWindowLevelForKey(.statusWindow) + 1
 
