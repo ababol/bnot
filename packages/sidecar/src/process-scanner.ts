@@ -11,6 +11,15 @@ const LIVENESS_INTERVAL_MS = 500;
 const CPU_ACTIVE_THRESHOLD = 2.0;
 const COMPLETION_DELAY_MS = 5000;
 
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 interface ProcessInfo {
   pid: number;
   parentPid: number;
@@ -66,8 +75,21 @@ export class ProcessScanner {
   private async scan() {
     const activePids = await this.findClaudeProcesses();
 
-    // Add new sessions
+    // Build the pid → hook-session lookup once up-front. When a hook session
+    // already represents a Claude pid, we must NOT (re)create a proc-<pid>
+    // shadow entry for it — a previous scan merged the proc session away,
+    // and recreating it would be picked up as "new" and re-trigger /color
+    // injection on every scan.
+    const hookByClaudePid: Record<number, string> = {};
+    for (const [id, s] of Object.entries(this.sm.sessions)) {
+      if (id.startsWith("proc-")) continue;
+      if (s.terminalPid != null) hookByClaudePid[s.terminalPid] = id;
+    }
+
+    // Add / update proc-<pid> sessions. Skip any pid that's already
+    // represented by a hook session (see comment above).
     for (const info of activePids) {
+      if (hookByClaudePid[info.pid]) continue;
       const sessionId = `proc-${info.pid}`;
       if (!this.sm.sessions[sessionId]) {
         this.sm.sessions[sessionId] = {
@@ -112,16 +134,22 @@ export class ProcessScanner {
       }
     }
 
-    const activePidSet = new Set(activePids.map((p) => `proc-${p.pid}`));
-    const alivePids = new Set(activePids.map((p) => p.pid));
-
-    // Mark completed and schedule deletion if process gone
+    // Mark completed and schedule deletion if process gone. Check pid
+    // liveness directly (kill(pid, 0)) instead of relying on `activePids` —
+    // the enrichment pipeline (ps + lsof + git) can transiently miss a pid,
+    // which would incorrectly mark a live hook session as orphaned, blow it
+    // away after COMPLETION_DELAY, and cause proc-<pid> to come back and
+    // re-trigger /color injection.
     for (const [id, session] of Object.entries(this.sm.sessions)) {
       if (this.pendingDeletions.has(id)) continue;
 
-      const isOrphan = id.startsWith("proc-")
-        ? !activePidSet.has(id)
-        : session.processPid != null && !alivePids.has(session.processPid);
+      let isOrphan = false;
+      if (id.startsWith("proc-")) {
+        const pid = session.processPid ?? Number(id.slice("proc-".length));
+        isOrphan = Number.isFinite(pid) && !isPidAlive(pid);
+      } else if (session.processPid != null) {
+        isOrphan = !isPidAlive(session.processPid);
+      }
 
       if (isOrphan) {
         this.sm.sessions[id].status = "completed";
@@ -138,12 +166,7 @@ export class ProcessScanner {
     // separate. A hook session stores Claude's pid in `terminalPid` (bridge's
     // parent == the Claude process that spawned the hook). A proc- session's
     // `processPid` is the same Claude pid. Match on that identity.
-    const hookByClaudePid: Record<number, string> = {};
-    for (const [id, s] of Object.entries(this.sm.sessions)) {
-      if (id.startsWith("proc-")) continue;
-      if (s.terminalPid != null) hookByClaudePid[s.terminalPid] = id;
-    }
-
+    // `hookByClaudePid` was built at the top of scan().
     for (const id of Object.keys(this.sm.sessions)) {
       if (!id.startsWith("proc-")) continue;
       const proc = this.sm.sessions[id];
@@ -162,12 +185,22 @@ export class ProcessScanner {
       if (proc.sessionMode && proc.sessionMode !== "normal") {
         kept.sessionMode = proc.sessionMode;
       }
+      // Carry over agentColor, Ghostty terminal id, and the "already injected
+      // /color" flag so we don't re-run the bootstrap after the hook session
+      // supersedes the proc entry.
+      if (proc.agentColor) kept.agentColor = proc.agentColor;
+      if (proc.ghosttyTerminalId) kept.ghosttyTerminalId = proc.ghosttyTerminalId;
+      if (this.sm.coloredSessions.has(id)) {
+        this.sm.coloredSessions.add(hookId);
+        this.sm.coloredSessions.delete(id);
+      }
       delete this.sm.sessions[id];
     }
 
-    // Push live tty/pid/cpu into the matching hook session (by Claude pid)
-    // and trigger /color injection once a tty appears (skip first scan so
-    // sessions that already existed before launch aren't retyped).
+    // Push live tty/pid/cpu into the matching hook session (by Claude pid).
+    // On first scan: only capture the Ghostty terminal id (don't type /color
+    // into pre-existing sessions). On later scans: inject /color + capture id
+    // for brand-new sessions.
     for (const info of activePids) {
       const hookId = hookByClaudePid[info.pid];
       if (!hookId) continue;
@@ -176,19 +209,23 @@ export class ProcessScanner {
       hookSession.tty = info.tty ?? undefined;
       hookSession.processPid = info.pid;
       hookSession.cpuPercent = info.cpuPercent;
-      if (this.firstScanDone && hookSession.tty && !this.sm.coloredSessions.has(hookId)) {
-        this.sm.tryInjectColor(hookSession);
+      if (hookSession.tty) {
+        if (this.firstScanDone && !this.sm.coloredSessions.has(hookId)) {
+          this.sm.tryInjectColor(hookSession);
+        } else if (!hookSession.ghosttyTerminalId) {
+          this.sm.tryCaptureTerminalId(hookSession);
+        }
       }
     }
 
-    // Also trigger injection for fresh proc- sessions that have a tty.
-    if (this.firstScanDone) {
-      for (const info of activePids) {
-        const sessionId = `proc-${info.pid}`;
-        const session = this.sm.sessions[sessionId];
-        if (session?.tty && !this.sm.coloredSessions.has(sessionId)) {
-          this.sm.tryInjectColor(session);
-        }
+    for (const info of activePids) {
+      const sessionId = `proc-${info.pid}`;
+      const session = this.sm.sessions[sessionId];
+      if (!session?.tty) continue;
+      if (this.firstScanDone && !this.sm.coloredSessions.has(sessionId)) {
+        this.sm.tryInjectColor(session);
+      } else if (!session.ghosttyTerminalId) {
+        this.sm.tryCaptureTerminalId(session);
       }
     }
 
@@ -206,6 +243,12 @@ export class ProcessScanner {
   }
 
   private updateHeroSession() {
+    // Ghostty's currently-focused tab wins when it maps to a known session.
+    if (this.sm.focusedSessionId && this.sm.sessions[this.sm.focusedSessionId]) {
+      this.sm.heroSessionId = this.sm.focusedSessionId;
+      return;
+    }
+
     const active = Object.values(this.sm.sessions).filter((s) => s.status === "active");
     const busiest = active.reduce(
       (best, s) => (s.cpuPercent > (best?.cpuPercent ?? 0) ? s : best),

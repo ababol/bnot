@@ -134,6 +134,7 @@ export interface AgentSession {
   sessionName?: string;
   agentColor?: string;
   claudeSessionId?: string;
+  ghosttyTerminalId?: string;
 }
 
 // History session from ~/.claude/projects/*/sessions-index.json

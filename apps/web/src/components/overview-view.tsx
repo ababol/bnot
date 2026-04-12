@@ -33,7 +33,9 @@ export default function OverviewView({ notchHeight }: Props) {
     const aPriority = a.status === "waitingApproval" || a.status === "waitingAnswer" ? 0 : 1;
     const bPriority = b.status === "waitingApproval" || b.status === "waitingAnswer" ? 0 : 1;
     if (aPriority !== bPriority) return aPriority - bPriority;
-    return a.workingDirectory.localeCompare(b.workingDirectory);
+    // Newest first, oldest last — so a session's rank stays stable as
+    // newer sessions appear above it, and it drifts toward the bottom.
+    return b.startedAt - a.startedAt;
   });
   const prioritySession = sortedSessions.find(
     (s) => s.status === "waitingApproval" || s.status === "waitingAnswer",

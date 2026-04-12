@@ -1,4 +1,5 @@
 import { ContextScanner } from "./context-scanner.js";
+import { GhosttyFocusWatcher } from "./ghostty-focus-watcher.js";
 import { HistoryScanner } from "./history-scanner.js";
 import { installHooksIfNeeded } from "./hook-installer.js";
 import { emit, onRequest } from "./ipc.js";
@@ -47,6 +48,7 @@ const socketServer = new SocketServer((msg, clientFd) => {
 const processScanner = new ProcessScanner(sessionManager);
 const contextScanner = new ContextScanner(sessionManager);
 const historyScanner = new HistoryScanner();
+const ghosttyFocusWatcher = new GhosttyFocusWatcher(sessionManager);
 
 // Handle IPC requests from Tauri
 onRequest(async (method, params) => {
@@ -152,6 +154,7 @@ socketServer.start();
 processScanner.start();
 contextScanner.start();
 historyScanner.start();
+ghosttyFocusWatcher.start();
 installHooksIfNeeded().catch((err) => process.stderr.write(`[hookInstaller] error: ${err}\n`));
 
 // Heartbeat
@@ -164,6 +167,7 @@ function cleanup() {
   processScanner.stop();
   contextScanner.stop();
   historyScanner.stop();
+  ghosttyFocusWatcher.stop();
   socketServer.stop();
   process.exit(0);
 }

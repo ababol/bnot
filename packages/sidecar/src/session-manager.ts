@@ -6,7 +6,6 @@ import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
 const exec = promisify(execFile);
 
 const DEBOUNCE_MS = 50;
-const PANEL_RESET_DELAY_MS = 6000;
 
 const CLAUDE_COLORS = ["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
 
@@ -23,6 +22,7 @@ function hashColor(id: string): string {
 export class SessionManager {
   sessions: Record<string, AgentSession> = {};
   heroSessionId: string | null = null;
+  focusedSessionId: string | null = null;
   pendingApprovalClients: Record<string, number> = {};
   coloredSessions = new Set<string>();
 
@@ -189,19 +189,15 @@ export class SessionManager {
       }
 
       case "sessionEnd": {
+        // Claude Code's `Stop` hook fires at the end of every assistant turn,
+        // not at session end. Don't mark completed or delete — Claude is still
+        // running and awaiting the next prompt. True session death is detected
+        // by the process scanner's kill(pid,0) orphan sweep.
         this.ensureSession(sessionId, timestamp);
-        this.sessions[sessionId].status = "completed";
         this.sessions[sessionId].isThinking = false;
+        this.sessions[sessionId].currentTool = undefined;
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         delete this.pendingApprovalClients[sessionId];
-        this.heroSessionId = sessionId;
-
-        // Keep the session visible in compact (with green check dot) for a moment,
-        // then remove it so the notch frees up.
-        setTimeout(() => {
-          delete this.sessions[sessionId];
-          this.emitUpdate();
-        }, PANEL_RESET_DELAY_MS);
         break;
       }
 
@@ -236,55 +232,105 @@ export class SessionManager {
   }
 
   /**
-   * Inject `/color <color>` into a Claude Code session via AppleScript keystroke
-   * injection. Claude processes the slash command and writes its own
-   * `agent-color` entry to the session JSONL — we never touch the JSONL.
-   * Uses a TTY OSC marker to focus the exact Ghostty tab, injects the command,
-   * then returns focus to the previous app. One-shot per session.
+   * Inject `/color <color>` for a brand-new session AND capture its Ghostty
+   * terminal id. Skipped when the session already has both color and id
+   * (e.g. color loaded from JSONL + id captured previously).
    */
   tryInjectColor(session: AgentSession) {
     if (this.coloredSessions.has(session.id)) return;
-    void this._doInjectColor(session);
+    if (session.agentColor && session.ghosttyTerminalId) {
+      this.coloredSessions.add(session.id);
+      return;
+    }
+    const injectColor = !session.agentColor;
+    this.coloredSessions.add(session.id);
+    void this._bootstrapGhostty(session, injectColor);
   }
 
-  private async _doInjectColor(session: AgentSession) {
+  /**
+   * Capture only the Ghostty terminal id for a session. Writes a one-shot
+   * OSC-title marker to its tty, queries Ghostty for the terminal with that
+   * name, reads its stable `id`, and stops — never focuses the terminal and
+   * never touches frontApp. The marker lives ~60ms before the shell/Claude
+   * rewrites the title; the id is stable for the lifetime of the tab.
+   */
+  tryCaptureTerminalId(session: AgentSession) {
+    if (session.ghosttyTerminalId) return;
+    void this._captureTerminalId(session);
+  }
+
+  private async _captureTerminalId(session: AgentSession) {
     const tty = session.tty;
     if (!tty || !/^ttys\d+$/.test(tty)) return;
     if (session.terminalApp && session.terminalApp !== "Ghostty") return;
 
-    const color = hashColor(session.workingDirectory + session.id);
-    session.agentColor = color;
-    this.coloredSessions.add(session.id);
-
     try {
       const { writeFile } = await import("fs/promises");
-      const marker = `buddy-color-${Math.random().toString(36).slice(2, 6)}`;
+      const marker = `buddy-id-${Math.random().toString(36).slice(2, 6)}`;
       await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
       await new Promise((r) => setTimeout(r, 60));
 
-      const script = `
-tell application "System Events"
-  set frontApp to name of first process whose frontmost is true
-end tell
-tell application "Ghostty"
+      const script = `tell application "Ghostty"
   set matches to every terminal whose name is "${marker}"
   if (count of matches) > 0 then
-    focus item 1 of matches
+    return id of (item 1 of matches) as text
   end if
 end tell
-delay 0.05
-tell application "System Events"
+return ""`;
+      const { stdout } = await exec("/usr/bin/osascript", ["-e", script]);
+      const id = stdout.trim();
+      if (id) session.ghosttyTerminalId = id;
+    } catch {
+      // Capture failed — not critical.
+    }
+  }
+
+  private async _bootstrapGhostty(session: AgentSession, injectColor: boolean) {
+    const tty = session.tty;
+    if (!tty || !/^ttys\d+$/.test(tty)) return;
+    if (session.terminalApp && session.terminalApp !== "Ghostty") return;
+
+    const color = injectColor ? hashColor(session.workingDirectory + session.id) : null;
+    if (color) session.agentColor = color;
+
+    try {
+      const { writeFile } = await import("fs/promises");
+      const marker = `buddy-id-${Math.random().toString(36).slice(2, 6)}`;
+      await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
+      await new Promise((r) => setTimeout(r, 60));
+
+      const typeColor = color
+        ? `tell application "System Events"
   keystroke "/color ${color}"
   delay 0.04
   key code 36
 end tell
 delay 0.08
-tell application frontApp
+`
+        : "";
+
+      const script = `
+tell application "System Events"
+  set frontApp to name of first process whose frontmost is true
+end tell
+set terminalId to ""
+tell application "Ghostty"
+  set matches to every terminal whose name is "${marker}"
+  if (count of matches) > 0 then
+    set terminalId to id of (item 1 of matches) as text
+    focus item 1 of matches
+  end if
+end tell
+delay 0.05
+${typeColor}tell application frontApp
   activate
-end tell`;
-      await exec("/usr/bin/osascript", ["-e", script]);
+end tell
+return terminalId`;
+      const { stdout } = await exec("/usr/bin/osascript", ["-e", script]);
+      const id = stdout.trim();
+      if (id) session.ghosttyTerminalId = id;
     } catch {
-      // Terminal injection failed — not critical
+      // Terminal bootstrap failed — not critical
     }
   }
 
