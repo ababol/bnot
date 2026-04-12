@@ -114,7 +114,9 @@ export interface AgentSession {
   };
   pendingQuestion?: {
     question: string;
+    header?: string;
     options: string[];
+    optionDescriptions?: string[];
     receivedAt: number;
   };
   contextTokens: number;

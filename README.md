@@ -165,9 +165,7 @@ Edit via the system tray menu (Settings...) or directly.
 
 ## Browser Extension
 
-BuddyNotch includes an optional browser userscript/extension that adds an "Open in worktree" button on GitHub PR pages. It sends a `buddynotch://worktree?owner=...&repo=...&branch=...` deep link that the app handles to create a git worktree and open it in your terminal.
-
-Install via the system tray menu (Install Userscript...).
+BuddyNotch includes an optional Chrome extension that adds an "Open in worktree" button on GitHub PR pages. It sends a `buddynotch://worktree?owner=...&repo=...&branch=...` deep link that the app handles to create a git worktree and open it in your terminal.
 
 ## License
 

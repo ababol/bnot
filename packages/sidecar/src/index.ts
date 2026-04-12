@@ -7,8 +7,7 @@ import { RepoFinder } from "./repo-finder.js";
 import { resumeSession } from "./session-launcher.js";
 import { SessionManager } from "./session-manager.js";
 import { SocketServer } from "./socket-server.js";
-import { answerQuestion, jumpToSession } from "./terminal-jumper.js";
-import { promptUserscriptInstall } from "./userscript-installer.js";
+import { jumpToSession } from "./terminal-jumper.js";
 import { WorktreeCreator } from "./worktree-creator.js";
 
 function requireParam(params: Record<string, unknown> | undefined, key: string): string {
@@ -154,7 +153,6 @@ processScanner.start();
 contextScanner.start();
 historyScanner.start();
 installHooksIfNeeded().catch((err) => process.stderr.write(`[hookInstaller] error: ${err}\n`));
-promptUserscriptInstall();
 
 // Heartbeat
 setInterval(() => {

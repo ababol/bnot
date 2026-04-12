@@ -4,6 +4,16 @@ import * as path from "path";
 
 const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 
+const REQUIRED_HOOKS: Record<string, string> = {
+  PreToolUse: "pre-tool",
+  PostToolUse: "post-tool",
+  PermissionRequest: "perm-request",
+  Notification: "notify",
+  Stop: "stop",
+};
+
+type HookEntry = { matcher?: string; hooks?: Array<{ command?: string; timeout?: number; type?: string }> };
+
 export async function installHooksIfNeeded(bridgePath?: string) {
   const bridge = bridgePath ?? (await findBridgePath());
   if (!bridge) {
@@ -20,40 +30,36 @@ export async function installHooksIfNeeded(bridgePath?: string) {
     return;
   }
 
-  // Check if already installed (look for buddy-bridge in any hook event)
-  const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>;
-  const hasBridge = Object.values(hooks).some((entries) =>
-    (entries as Array<{ hooks?: Array<{ command?: string }> }>)?.some((entry) =>
-      entry.hooks?.some((h) => h.command?.includes("buddy-bridge")),
+  const hooks = (settings.hooks ?? {}) as Record<string, HookEntry[]>;
+
+  const allInstalled = Object.entries(REQUIRED_HOOKS).every(([event, subcommand]) =>
+    (hooks[event] ?? []).some((entry) =>
+      entry.hooks?.some((h) => h.command?.includes(`buddy-bridge ${subcommand}`)),
     ),
   );
-  if (hasBridge) {
+  if (allInstalled) {
     process.stderr.write("[hookInstaller] hooks already installed\n");
     return;
   }
 
-  // Install hooks for each event
-  const newHooks: Record<string, unknown[]> = { ...hooks };
+  // Strip any existing buddy-bridge entries, then reinstall all required hooks.
+  // Handles upgrades from older installs that had fewer events or stale timeouts.
+  const newHooks: Record<string, HookEntry[]> = {};
+  for (const [event, entries] of Object.entries(hooks)) {
+    const filtered = entries.filter(
+      (entry) => !entry.hooks?.some((h) => h.command?.includes("buddy-bridge")),
+    );
+    if (filtered.length > 0) newHooks[event] = filtered;
+  }
 
-  function addHook(event: string, subcommand: string) {
-    const entries = (newHooks[event] ?? []) as unknown[];
+  for (const [event, subcommand] of Object.entries(REQUIRED_HOOKS)) {
+    const entries = newHooks[event] ?? [];
     entries.push({
       matcher: "",
-      hooks: [
-        {
-          type: "command",
-          command: `${bridge} ${subcommand}`,
-        },
-      ],
+      hooks: [{ type: "command", command: `${bridge} ${subcommand}` }],
     });
     newHooks[event] = entries;
   }
-
-  addHook("PreToolUse", "pre-tool");
-  addHook("PostToolUse", "post-tool");
-  addHook("PermissionRequest", "perm-request");
-  addHook("Notification", "notify");
-  addHook("Stop", "stop");
 
   settings.hooks = newHooks;
 

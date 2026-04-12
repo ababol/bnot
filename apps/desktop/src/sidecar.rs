@@ -13,6 +13,9 @@ pub struct SidecarManager {
 
 impl SidecarManager {
     pub fn spawn<R: Runtime>(app: &AppHandle<R>) -> Self {
+        // Kill any leftover sidecar from a previous run
+        kill_stale_sidecar();
+
         let child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
         let stdin: Arc<Mutex<Option<ChildStdin>>> = Arc::new(Mutex::new(None));
 
@@ -109,7 +112,14 @@ impl SidecarManager {
 
     pub fn kill(&self) {
         if let Some(ref mut child) = *self.child.lock().unwrap() {
+            // Send SIGTERM so the sidecar can clean up (PID file, socket)
+            let _ = Command::new("kill")
+                .args(["-s", "TERM", &child.id().to_string()])
+                .output();
+            // Give it a moment to shut down, then force kill
+            std::thread::sleep(std::time::Duration::from_millis(200));
             let _ = child.kill();
+            let _ = child.wait();
         }
     }
 }
@@ -144,6 +154,58 @@ fn handle_tauri_command(data: &serde_json::Value) {
         _ => {
             eprintln!("[sidecar] unknown tauriCommand: {method}");
         }
+    }
+}
+
+/// Kill any leftover sidecar processes from previous runs.
+/// Uses both the PID file and a process scan to catch orphans.
+fn kill_stale_sidecar() {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let pid_path = format!("{home}/.buddy-notch/buddy.pid");
+    let mut killed = false;
+
+    // 1. Kill the process from the PID file
+    if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
+        if let Ok(pid) = pid_str.trim().parse::<i32>() {
+            let alive = Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if alive {
+                eprintln!("[sidecar] killing stale sidecar (pid {pid})");
+                let _ = Command::new("kill").args([&pid.to_string()]).output();
+                killed = true;
+            }
+        }
+        let _ = std::fs::remove_file(&pid_path);
+    }
+
+    // 2. Scan for any orphaned sidecar processes (ppid=1, running "node index.mjs")
+    if let Ok(output) = Command::new("/bin/ps")
+        .args(["-eo", "pid,ppid,args"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let cols: Vec<&str> = line.trim().splitn(3, char::is_whitespace).collect();
+            if cols.len() < 3 {
+                continue;
+            }
+            let Ok(pid) = cols[0].parse::<i32>() else { continue };
+            let ppid = cols[1].trim();
+            let args = cols[2];
+            // Match orphaned (ppid=1) node processes running our sidecar
+            if ppid == "1" && args.contains("node") && args.contains("index.mjs") {
+                eprintln!("[sidecar] killing orphaned sidecar (pid {pid})");
+                let _ = Command::new("kill").args([&pid.to_string()]).output();
+                killed = true;
+            }
+        }
+    }
+
+    if killed {
+        std::thread::sleep(std::time::Duration::from_millis(300));
     }
 }
 
