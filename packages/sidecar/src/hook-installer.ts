@@ -21,7 +21,7 @@ type HookEntry = {
 export async function installHooksIfNeeded(bridgePath?: string) {
   const bridge = bridgePath ?? (await findBridgePath());
   if (!bridge) {
-    process.stderr.write("[hookInstaller] buddy-bridge binary not found, skipping hook install\n");
+    process.stderr.write("[hookInstaller] bnot-bridge binary not found, skipping hook install\n");
     return;
   }
 
@@ -38,7 +38,7 @@ export async function installHooksIfNeeded(bridgePath?: string) {
 
   const allInstalled = Object.entries(REQUIRED_HOOKS).every(([event, subcommand]) =>
     (hooks[event] ?? []).some((entry) =>
-      entry.hooks?.some((h) => h.command?.includes(`buddy-bridge ${subcommand}`)),
+      entry.hooks?.some((h) => h.command?.includes(`bnot-bridge ${subcommand}`)),
     ),
   );
   if (allInstalled) {
@@ -46,12 +46,12 @@ export async function installHooksIfNeeded(bridgePath?: string) {
     return;
   }
 
-  // Strip any existing buddy-bridge entries, then reinstall all required hooks.
+  // Strip any existing bnot-bridge entries, then reinstall all required hooks.
   // Handles upgrades from older installs that had fewer events or stale timeouts.
   const newHooks: Record<string, HookEntry[]> = {};
   for (const [event, entries] of Object.entries(hooks)) {
     const filtered = entries.filter(
-      (entry) => !entry.hooks?.some((h) => h.command?.includes("buddy-bridge")),
+      (entry) => !entry.hooks?.some((h) => h.command?.includes("bnot-bridge")),
     );
     if (filtered.length > 0) newHooks[event] = filtered;
   }
@@ -79,15 +79,15 @@ async function findBridgePath(): Promise<string | null> {
   const cwd = process.cwd();
   const candidates = [
     // Bundled inside .app Resources (sidecar cwd is Resources/sidecar/)
-    path.resolve(cwd, "../bin/buddy-bridge"),
-    path.join(os.homedir(), ".local/bin/buddy-bridge"),
-    "/usr/local/bin/buddy-bridge",
-    path.resolve(cwd, "target/debug/buddy-bridge"),
-    path.resolve(cwd, "target/release/buddy-bridge"),
-    path.resolve(cwd, "../target/debug/buddy-bridge"),
-    path.resolve(cwd, "../target/release/buddy-bridge"),
-    path.resolve(cwd, "../../target/debug/buddy-bridge"),
-    path.resolve(cwd, "../../target/release/buddy-bridge"),
+    path.resolve(cwd, "../bin/bnot-bridge"),
+    path.join(os.homedir(), ".local/bin/bnot-bridge"),
+    "/usr/local/bin/bnot-bridge",
+    path.resolve(cwd, "target/debug/bnot-bridge"),
+    path.resolve(cwd, "target/release/bnot-bridge"),
+    path.resolve(cwd, "../target/debug/bnot-bridge"),
+    path.resolve(cwd, "../target/release/bnot-bridge"),
+    path.resolve(cwd, "../../target/debug/bnot-bridge"),
+    path.resolve(cwd, "../../target/release/bnot-bridge"),
   ];
 
   for (const c of candidates) {

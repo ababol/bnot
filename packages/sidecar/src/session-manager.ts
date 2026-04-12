@@ -268,7 +268,7 @@ export class SessionManager {
 
     try {
       const { writeFile } = await import("fs/promises");
-      const marker = `buddy-id-${Math.random().toString(36).slice(2, 6)}`;
+      const marker = `bnot-id-${Math.random().toString(36).slice(2, 6)}`;
       await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
       await new Promise((r) => setTimeout(r, 60));
 
@@ -297,7 +297,7 @@ return ""`;
 
     try {
       const { writeFile } = await import("fs/promises");
-      const marker = `buddy-id-${Math.random().toString(36).slice(2, 6)}`;
+      const marker = `bnot-id-${Math.random().toString(36).slice(2, 6)}`;
       await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
       await new Promise((r) => setTimeout(r, 60));
 

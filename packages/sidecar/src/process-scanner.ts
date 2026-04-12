@@ -297,7 +297,7 @@ export class ProcessScanner {
       if (commBase !== "claude") continue;
 
       const cmdLine = `${comm} ${args}`;
-      if (/BuddyBridge|VibeBridge|BuddyNotch|pgrep|claude-code-guide/.test(cmdLine)) continue;
+      if (/BnotBridge|VibeBridge|Bnot|pgrep|claude-code-guide/.test(cmdLine)) continue;
       if (cmdLine.includes("--print") || cmdLine.includes("--output-format")) continue;
       if (cmdLine.includes("--resume") && cmdLine.includes("--no-session")) continue;
 

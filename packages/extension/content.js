@@ -1,20 +1,16 @@
 (function () {
   "use strict";
 
-  const BTN_CLASS = "buddynotch-worktree-btn";
+  const BTN_CLASS = "bnot-worktree-btn";
 
   function getPRMetadata() {
-    const urlMatch = location.pathname.match(
-      /\/([^/]+)\/([^/]+)\/pull\/(\d+)/,
-    );
+    const urlMatch = location.pathname.match(/\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
     if (!urlMatch) return null;
 
     const [, owner, repo] = urlMatch;
 
     // Find any head branch link to extract metadata
-    const branchLinks = document.querySelectorAll(
-      'a[class*="BranchName"][href*="/tree/"]',
-    );
+    const branchLinks = document.querySelectorAll('a[class*="BranchName"][href*="/tree/"]');
 
     // Head branch links are inside a div with a copy button sibling
     for (const link of branchLinks) {
@@ -42,8 +38,8 @@
   function createButton(meta) {
     const btn = document.createElement("button");
     btn.className = BTN_CLASS;
-    btn.title = "Open in BuddyNotch worktree";
-    btn.setAttribute("aria-label", "Open in BuddyNotch worktree");
+    btn.title = "Open in Bnot worktree";
+    btn.setAttribute("aria-label", "Open in Bnot worktree");
 
     Object.assign(btn.style, {
       display: "inline-flex",
@@ -60,7 +56,7 @@
       lineHeight: "1",
     });
 
-    // Buddy pixel-art character (matches BuddyNotch tray icon)
+    // Bnot pixel-art character (matches Bnot tray icon)
     btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="3" y="2" width="3" height="2" rx="0.5" fill="#4ade80"/>
       <rect x="10" y="2" width="3" height="2" rx="0.5" fill="#4ade80"/>
@@ -93,7 +89,7 @@
         headRepo: meta.headRepo,
       });
 
-      window.location.href = `buddynotch://worktree?${params.toString()}`;
+      window.location.href = `bnot://worktree?${params.toString()}`;
     });
 
     return btn;
@@ -104,9 +100,7 @@
     if (!meta) return;
 
     // Find all head branch containers (the ones with the copy button)
-    const branchLinks = document.querySelectorAll(
-      'a[class*="BranchName"][href*="/tree/"]',
-    );
+    const branchLinks = document.querySelectorAll('a[class*="BranchName"][href*="/tree/"]');
 
     for (const link of branchLinks) {
       // Head branch link's direct parent is a div; base branch is inside a span

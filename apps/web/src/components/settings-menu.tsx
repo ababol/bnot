@@ -63,7 +63,7 @@ export default function SettingsMenu({ onAction }: Props) {
         className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-text-secondary hover:bg-white/10"
       >
         <span className="w-3" />
-        <span>Quit BuddyNotch</span>
+        <span>Quit Bnot</span>
       </button>
     </>
   );

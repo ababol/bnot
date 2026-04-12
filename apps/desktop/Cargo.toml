@@ -1,5 +1,5 @@
 [package]
-name = "buddynotch"
+name = "bnot"
 version = "0.1.0"
 edition = "2021"
 
@@ -25,5 +25,5 @@ objc2-app-kit = { version = "0.3", features = [
 core-graphics = "0.24"
 
 [lib]
-name = "buddynotch_lib"
+name = "bnot_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

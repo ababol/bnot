@@ -2,10 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { useSession } from "../context/session-context";
-import { buddyColorFromSessions } from "../lib/colors";
+import { bnotColorFromSessions } from "../lib/colors";
 import { collapsePanel, jumpToSession } from "../lib/tauri";
 import HistoryCard from "./history-card";
-import PixelBuddy from "./pixel-buddy";
+import PixelBnot from "./pixel-bnot";
 import SessionCard from "./session-card";
 import SettingsMenu from "./settings-menu";
 
@@ -41,7 +41,7 @@ export default function OverviewView({ notchHeight }: Props) {
     (s) => s.status === "waitingApproval" || s.status === "waitingAnswer",
   );
   const heroId = prioritySession?.id ?? state.heroSessionId ?? sortedSessions[0]?.id ?? null;
-  const buddyColor = buddyColorFromSessions(sessions);
+  const bnotColor = bnotColorFromSessions(sessions);
 
   const close = () => collapsePanel(dispatch, sessions);
 
@@ -76,7 +76,7 @@ export default function OverviewView({ notchHeight }: Props) {
 
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 pb-2">
-        <PixelBuddy color={buddyColor} isActive={true} />
+        <PixelBnot color={bnotColor} isActive={true} />
         <span className="text-xs font-semibold text-text-secondary">Sessions</span>
         <div className="flex-1" />
         <div className="relative" data-settings-anchor>

@@ -1,6 +1,6 @@
-# BuddyNotch
+# Bnot
 
-A macOS notch-panel app that monitors Claude Code sessions in real time. Lives in your MacBook's notch as a pixel-art buddy that shows context usage, session count, approval requests, and lets you jump to the exact terminal tab and pane.
+A macOS notch-panel app that monitors Claude Code sessions in real time. Lives in your MacBook's notch as a pixel-art bnot that shows context usage, session count, approval requests, and lets you jump to the exact terminal tab and pane.
 
 Inspired by [vibeisland.app](https://vibeisland.app/).
 
@@ -9,15 +9,15 @@ https://github.com/user-attachments/assets/placeholder
 ## Features
 
 - **Auto-detects all running Claude Code sessions** via process scanning and hook integration
-- **Context window gauge** — battery-style fill inside the buddy character (green / yellow / red)
+- **Context window gauge** — battery-style fill inside the bnot character (green / yellow / red)
 - **Session overview panel** — expands with smooth animation showing repo, branch, context bars, and tool activity
 - **Terminal jumping** — click a session to focus the exact Ghostty tab + split pane (iTerm and Warp supported too)
 - **Approval flow** — shows permission requests with diff previews, approve/deny from the notch
 - **Question flow** — displays Claude's questions with clickable options
 - **Session history** — resume recent sessions in a new terminal
 - **Worktree support** — open GitHub PR branches in git worktrees via deep links or browser extension
-- **Unique buddy per session** — deterministic pixel-art character traits (color, hat, ears) from repo + branch hash
-- **Idle detection** — buddy sleeps with Zzz animation when all sessions are idle
+- **Unique bnot per session** — deterministic pixel-art character traits (color, hat, ears) from repo + branch hash
+- **Idle detection** — bnot sleeps with Zzz animation when all sessions are idle
 
 ## Tech Stack
 
@@ -34,7 +34,7 @@ https://github.com/user-attachments/assets/placeholder
 Claude Code hooks
     |
     v
-buddy-bridge (Rust CLI) ---> Unix socket ---> Node.js Sidecar
+bnot-bridge (Rust CLI) ---> Unix socket ---> Node.js Sidecar
                                                   |
                                               stdin/stdout NDJSON
                                                   |
@@ -86,7 +86,7 @@ CGEvent keyboard injection (for terminal tab jumping) requires macOS Accessibili
 ## Project Structure
 
 ```
-buddynotch/
+bnot/
   apps/
     desktop/                # Tauri v2 Rust core
       src/
@@ -98,11 +98,11 @@ buddynotch/
         sidecar.rs          # Node.js child process lifecycle
     web/                    # React + Tailwind frontend
       src/
-        components/         # compact-view, overview-view, session-card, pixel-buddy,
+        components/         # compact-view, overview-view, session-card, pixel-bnot,
                             # pixel-bell, pixel-progress-bar, diff-view, status-indicator, context-menu
         context/            # SessionContext (useReducer), types, derived helpers
         hooks/              # use-tauri-events, use-timer, use-hero-session
-        lib/                # colors (buddy traits), format (time/tokens), tauri (IPC wrappers)
+        lib/                # colors (bnot traits), format (time/tokens), tauri (IPC wrappers)
   packages/
     sidecar/                # Node.js backend
       src/
@@ -130,7 +130,7 @@ Sessions are detected through two mechanisms:
 
 1. **Process scanning** — `ProcessScanner` runs `ps` every 2 seconds to find Claude Code processes, extracts their working directory, TTY, CPU usage, and git branch via `lsof` and `git`.
 
-2. **Hook events** — When Claude Code invokes a tool, the hook runs `buddy-bridge pre-tool` which sends the session info (tool name, file path, diff preview) to the sidecar via Unix socket.
+2. **Hook events** — When Claude Code invokes a tool, the hook runs `bnot-bridge pre-tool` which sends the session info (tool name, file path, diff preview) to the sidecar via Unix socket.
 
 Both sources are merged and deduplicated by the `SessionManager`.
 
@@ -140,7 +140,7 @@ Context token usage is estimated by reading the tail of the session's JSONL file
 
 ### Terminal Jumping
 
-When you click a session, BuddyNotch focuses the correct terminal:
+When you click a session, Bnot focuses the correct terminal:
 
 1. **Ghostty** — Writes a unique title marker to the session's TTY, then uses Ghostty's AppleScript API to find and focus the terminal with that title.
 2. **iTerm** — Searches all windows/tabs/sessions by directory name via AppleScript.
@@ -152,7 +152,7 @@ For dangerous tools (Bash, Edit, Write, NotebookEdit, MultiEdit), the bridge blo
 
 ## Configuration
 
-The config file at `~/.buddy-notch/config.json` controls which directories are scanned for git repositories (used for the worktree feature):
+The config file at `~/.bnot/config.json` controls which directories are scanned for git repositories (used for the worktree feature):
 
 ```json
 {
@@ -164,7 +164,7 @@ Edit via the gear icon in the overview panel or the right-click context menu on 
 
 ## Browser Extension
 
-BuddyNotch includes an optional Chrome extension that adds an "Open in worktree" button on GitHub PR pages. It sends a `buddynotch://worktree?owner=...&repo=...&branch=...` deep link that the app handles to create a git worktree and open it in your terminal.
+Bnot includes an optional Chrome extension that adds an "Open in worktree" button on GitHub PR pages. It sends a `bnot://worktree?owner=...&repo=...&branch=...` deep link that the app handles to create a git worktree and open it in your terminal.
 
 ## License
 

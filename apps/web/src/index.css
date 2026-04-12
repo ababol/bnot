@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 @theme {
-  --color-buddy-green: #4ade80;
-  --color-buddy-blue: #60a5fa;
-  --color-buddy-orange: #f97316;
-  --color-buddy-cyan: #22d3ee;
-  --color-buddy-red: #ef4444;
-  --color-buddy-yellow: #eab308;
+  --color-bnot-green: #4ade80;
+  --color-bnot-blue: #60a5fa;
+  --color-bnot-orange: #f97316;
+  --color-bnot-cyan: #22d3ee;
+  --color-bnot-red: #ef4444;
+  --color-bnot-yellow: #eab308;
   --color-surface: rgba(255, 255, 255, 0.03);
   --color-surface-hover: rgba(255, 255, 255, 0.08);
   --color-surface-active: rgba(255, 255, 255, 0.12);

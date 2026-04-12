@@ -159,12 +159,12 @@ fn handle_tauri_command(data: &serde_json::Value) {
 
 /// Kill any leftover sidecar and bridge processes from previous runs.
 /// Uses the PID file for the sidecar and a process scan to catch orphans.
-/// Also kills any running buddy-bridge processes — at this point a new sidecar
+/// Also kills any running bnot-bridge processes — at this point a new sidecar
 /// hasn't started yet, so any live bridge is talking to the old (dead) sidecar
 /// and will just sit in its approval timeout.
 fn kill_stale_sidecar() {
     let home = std::env::var("HOME").unwrap_or_default();
-    let pid_path = format!("{home}/.buddy-notch/buddy.pid");
+    let pid_path = format!("{home}/.bnot/bnot.pid");
     let mut killed = false;
 
     // 1. Kill the sidecar recorded in the PID file
@@ -184,9 +184,9 @@ fn kill_stale_sidecar() {
         let _ = std::fs::remove_file(&pid_path);
     }
 
-    // 2. Scan for orphaned sidecar processes and any running buddy-bridge.
+    // 2. Scan for orphaned sidecar processes and any running bnot-bridge.
     // Sidecar runs as `node … index.mjs` (release) or `node … src/index.ts` /
-    // `tsx … src/index.ts` (dev). Bridge runs as `…/buddy-bridge <subcommand>`.
+    // `tsx … src/index.ts` (dev). Bridge runs as `…/bnot-bridge <subcommand>`.
     if let Ok(output) = Command::new("/bin/ps")
         .args(["-eo", "pid,ppid,args"])
         .output()
@@ -204,7 +204,7 @@ fn kill_stale_sidecar() {
             let is_orphan_sidecar = ppid == "1"
                 && (args.contains("index.mjs")
                     || (args.contains("src/index.ts") && args.contains("sidecar")));
-            let is_bridge = args.contains("buddy-bridge");
+            let is_bridge = args.contains("bnot-bridge");
 
             if is_orphan_sidecar {
                 eprintln!("[sidecar] killing orphaned sidecar (pid {pid})");

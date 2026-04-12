@@ -64,7 +64,7 @@ pub fn run() {
             let _sidecar = sidecar::SidecarManager::spawn(&handle);
             app.manage(_sidecar);
 
-            // Handle deep link URLs (buddynotch://worktree?...)
+            // Handle deep link URLs (bnot://worktree?...)
             let dl_handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 for url_obj in event.urls() {

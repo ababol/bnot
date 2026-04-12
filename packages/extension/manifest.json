@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "BuddyNotch - Open in Worktree",
+  "name": "Bnot - Open in Worktree",
   "version": "1.0.0",
   "description": "Adds 'Open in worktree' button to GitHub PR pages",
   "content_scripts": [

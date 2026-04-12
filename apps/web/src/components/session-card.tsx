@@ -8,18 +8,18 @@ import {
   isIdle,
   isWorking,
   MODE_BADGE,
-  STATUS_BUDDY,
+  STATUS_BNOT,
   STATUS_TEXT,
   STATUS_TEXT_COLORS,
 } from "../context/types";
 import { useTimer } from "../hooks/use-timer";
-import type { BuddyColor } from "../lib/colors";
-import { buddyTraitsFromId, parseBuddyColor, sessionStatusDot } from "../lib/colors";
+import type { BnotColor } from "../lib/colors";
+import { bnotTraitsFromId, parseBnotColor, sessionStatusDot } from "../lib/colors";
 import { formatElapsed, formatIdle, shortenPath, tokenShort } from "../lib/format";
 import { collapsePanel } from "../lib/tauri";
 import DiffView, { diffStats } from "./diff-view";
 import PixelBell from "./pixel-bell";
-import PixelBuddy from "./pixel-buddy";
+import PixelBnot from "./pixel-bnot";
 import PixelProgressBar from "./pixel-progress-bar";
 import StatusIndicator from "./status-indicator";
 
@@ -46,9 +46,9 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
   const elapsed = idle
     ? now - session.lastActivity
     : now - (session.taskStartedAt ?? session.startedAt);
-  const buddyId = session.workingDirectory + (suffix ?? "");
-  const traits = buddyTraitsFromId(buddyId, suffix ?? undefined);
-  const buddyColor: BuddyColor = parseBuddyColor(session.agentColor) ?? traits.color;
+  const bnotId = session.workingDirectory + (suffix ?? "");
+  const traits = bnotTraitsFromId(bnotId, suffix ?? undefined);
+  const bnotColor: BnotColor = parseBnotColor(session.agentColor) ?? traits.color;
   const working = isWorking(session, now);
   const dot = sessionStatusDot(session.status, working, session.sessionMode);
   const approval = session.pendingApproval;
@@ -119,7 +119,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     >
       {/* Top row */}
       <div className="flex items-center gap-1.5">
-        <PixelBuddy color={buddyColor} isActive={working} traits={traits} />
+        <PixelBnot color={bnotColor} isActive={working} traits={traits} />
         <StatusIndicator dot={dot} size="sm" />
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-white">
           {session.sessionName ?? session.taskName ?? dirName}
@@ -153,7 +153,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
           {/* Tool + file */}
           <div className="flex items-baseline gap-1.5">
             <span className="text-[11px]">{"\u26A0"}</span>
-            <span className="font-mono text-[12px] font-bold text-buddy-orange">
+            <span className="font-mono text-[12px] font-bold text-bnot-orange">
               {approval.toolName}
             </span>
           </div>
@@ -168,8 +168,8 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
                     <span className="font-semibold text-white/70">
                       {approval.filePath ? shortenPath(approval.filePath) : "file"}
                     </span>
-                    {stats.added > 0 && <span className="text-buddy-green">+{stats.added}</span>}
-                    {stats.removed > 0 && <span className="text-buddy-red">-{stats.removed}</span>}
+                    {stats.added > 0 && <span className="text-bnot-green">+{stats.added}</span>}
+                    {stats.removed > 0 && <span className="text-bnot-red">-{stats.removed}</span>}
                   </div>
                 );
               })()}
@@ -182,7 +182,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
                   {shortenPath(approval.filePath)}
                 </div>
               )}
-              <div className="px-2.5 py-2 font-mono text-[11px] text-buddy-green">
+              <div className="px-2.5 py-2 font-mono text-[11px] text-bnot-green">
                 <span className="mr-1.5 text-text-dim">$</span>
                 {approval.input}
               </div>
@@ -223,13 +223,13 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
           {/* Header */}
           <div className="mb-1.5 flex items-center gap-1.5">
             <span className="text-[11px]">{"\uD83D\uDCAC"}</span>
-            <span className="text-[11px] font-semibold text-buddy-cyan">Claude's Question</span>
+            <span className="text-[11px] font-semibold text-bnot-cyan">Claude's Question</span>
           </div>
 
           {/* Question header tag + text */}
           <div className="mb-2 text-[12px] text-white/90">
             {question.header && (
-              <span className="mr-1.5 font-semibold text-buddy-cyan">[{question.header}]</span>
+              <span className="mr-1.5 font-semibold text-bnot-cyan">[{question.header}]</span>
             )}
             {question.question}
           </div>
@@ -240,9 +240,9 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
               <button
                 key={option}
                 onClick={(e) => handleOptionClick(e, i)}
-                className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-buddy-cyan/10 px-3 py-2.5 text-left hover:bg-buddy-cyan/20"
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-bnot-cyan/10 px-3 py-2.5 text-left hover:bg-bnot-cyan/20"
               >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-buddy-cyan/30 text-[10px] font-bold text-buddy-cyan">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-bnot-cyan/30 text-[10px] font-bold text-bnot-cyan">
                   {i + 1}
                 </span>
                 <div className="flex-1">
@@ -262,7 +262,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
         /* Hero details (non-approval) */
         <div className="mt-1">
           {session.currentTool && session.currentTool !== "Unknown" ? (
-            <div className="flex gap-1 font-mono text-[11px] text-buddy-cyan">
+            <div className="flex gap-1 font-mono text-[11px] text-bnot-cyan">
               <span className="font-medium">{session.currentTool}</span>
               {session.currentFilePath && (
                 <span className="text-text-dim">{shortenPath(session.currentFilePath)}</span>
@@ -288,7 +288,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
             <div className="flex-1">
               <PixelProgressBar
                 percent={contextPercent(session)}
-                color={STATUS_BUDDY[session.status]}
+                color={STATUS_BNOT[session.status]}
               />
             </div>
             <div className="shrink-0 font-mono text-[9px] font-medium text-text-dim">
@@ -323,7 +323,7 @@ function ExitPlanModeUI({
       {/* Header */}
       <div className="mb-1.5 flex items-baseline gap-1.5">
         <span className="text-[11px]">{"\u26A0"}</span>
-        <span className="font-mono text-[12px] font-bold text-buddy-orange">Plan</span>
+        <span className="font-mono text-[12px] font-bold text-bnot-orange">Plan</span>
       </div>
 
       {/* Plan content */}
@@ -344,7 +344,7 @@ function ExitPlanModeUI({
           }
         }}
         placeholder="Tell Claude what to change..."
-        className="mb-2 w-full rounded-lg border-none bg-surface px-3 py-2 text-[11px] text-white placeholder:text-text-dim focus:outline-none focus:ring-1 focus:ring-buddy-cyan/50"
+        className="mb-2 w-full rounded-lg border-none bg-surface px-3 py-2 text-[11px] text-white placeholder:text-text-dim focus:outline-none focus:ring-1 focus:ring-bnot-cyan/50"
       />
 
       {/* Action buttons */}
@@ -357,13 +357,13 @@ function ExitPlanModeUI({
         </button>
         <button
           onClick={onAcceptEdits}
-          className="flex-1 cursor-pointer rounded-lg border-none bg-buddy-orange/80 py-2 text-[11px] font-semibold text-black hover:bg-buddy-orange"
+          className="flex-1 cursor-pointer rounded-lg border-none bg-bnot-orange/80 py-2 text-[11px] font-semibold text-black hover:bg-bnot-orange"
         >
           Auto-accept Edits
         </button>
         <button
           onClick={onBypass}
-          className="flex-1 cursor-pointer rounded-lg border-none bg-buddy-red/80 py-2 text-[11px] font-semibold text-white hover:bg-buddy-red"
+          className="flex-1 cursor-pointer rounded-lg border-none bg-bnot-red/80 py-2 text-[11px] font-semibold text-white hover:bg-bnot-red"
         >
           Bypass Permissions
         </button>

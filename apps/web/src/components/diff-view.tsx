@@ -22,18 +22,14 @@ export default function DiffView({ diff }: Props) {
         const isRemove = line.startsWith("-") && !line.startsWith("---");
         const isContext = line.startsWith(" ");
 
-        const bgClass = isAdd ? "bg-buddy-green/15" : isRemove ? "bg-buddy-red/15" : "";
+        const bgClass = isAdd ? "bg-bnot-green/15" : isRemove ? "bg-bnot-red/15" : "";
 
-        const textClass = isAdd
-          ? "text-buddy-green"
-          : isRemove
-            ? "text-buddy-red"
-            : "text-white/60";
+        const textClass = isAdd ? "text-bnot-green" : isRemove ? "text-bnot-red" : "text-white/60";
 
         const numClass = isAdd
-          ? "text-buddy-green/60"
+          ? "text-bnot-green/60"
           : isRemove
-            ? "text-buddy-red/60"
+            ? "text-bnot-red/60"
             : "text-white/20";
 
         // Compute line number: context and added lines advance the counter,

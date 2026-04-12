@@ -104,10 +104,18 @@ export default function StatusIndicator({ dot, size = "sm" }: Props) {
       // Solid round dot in the middle; a ring of 8 positions around it spins
       // via trailing opacity to mimic a loader.
       const dotPixels: Array<[number, number]> = [
-        [4, 3], [5, 3],
-        [3, 4], [4, 4], [5, 4], [6, 4],
-        [3, 5], [4, 5], [5, 5], [6, 5],
-        [4, 6], [5, 6],
+        [4, 3],
+        [5, 3],
+        [3, 4],
+        [4, 4],
+        [5, 4],
+        [6, 4],
+        [3, 5],
+        [4, 5],
+        [5, 5],
+        [6, 5],
+        [4, 6],
+        [5, 6],
       ];
       for (const [x, y] of dotPixels) fillSingle(x, y);
 

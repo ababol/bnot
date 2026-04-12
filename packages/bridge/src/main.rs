@@ -8,7 +8,7 @@ mod hook_input;
 
 use hook_input::ClaudeHookInput;
 
-const SOCKET_PATH: &str = ".buddy-notch/buddy.sock";
+const SOCKET_PATH: &str = ".bnot/bnot.sock";
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Deserialize)]
@@ -27,7 +27,7 @@ fn socket_path() -> String {
 }
 
 #[derive(Parser)]
-#[command(name = "buddy-bridge", about = "Bridge between Claude Code hooks and BuddyNotch")]
+#[command(name = "bnot-bridge", about = "Bridge between Claude Code hooks and Bnot")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -170,7 +170,7 @@ fn main() {
         }
 
         Commands::PermRequest => {
-            // Blocking path: show approval UI in BuddyNotch, wait for user decision.
+            // Blocking path: show approval UI in Bnot, wait for user decision.
             // Responds with PermissionRequest hook output format.
             let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
 
@@ -229,7 +229,7 @@ fn main() {
 
             if let Some(resp) = send_and_wait(&session_start, &perm_request) {
                 let output = if resp.action == "deny" {
-                    let msg = resp.feedback.clone().unwrap_or_else(|| "Denied via BuddyNotch".to_string());
+                    let msg = resp.feedback.clone().unwrap_or_else(|| "Denied via Bnot".to_string());
                     serde_json::json!({
                         "hookSpecificOutput": {
                             "hookEventName": "PermissionRequest",

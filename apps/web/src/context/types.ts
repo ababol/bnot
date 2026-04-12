@@ -1,4 +1,4 @@
-import type { BuddyColor } from "../lib/colors";
+import type { BnotColor } from "../lib/colors";
 
 export type SessionStatus = "active" | "waitingApproval" | "waitingAnswer" | "completed" | "error";
 export type SessionMode = "normal" | "plan" | "auto" | "dangerous";
@@ -13,14 +13,14 @@ export interface NotchGeometry {
 }
 
 export const STATUS_TEXT_COLORS: Record<SessionStatus, string> = {
-  active: "text-buddy-green",
-  waitingApproval: "text-buddy-orange",
-  waitingAnswer: "text-buddy-cyan",
-  completed: "text-buddy-blue",
-  error: "text-buddy-red",
+  active: "text-bnot-green",
+  waitingApproval: "text-bnot-orange",
+  waitingAnswer: "text-bnot-cyan",
+  completed: "text-bnot-blue",
+  error: "text-bnot-red",
 };
 
-export const STATUS_BUDDY: Record<SessionStatus, BuddyColor> = {
+export const STATUS_BNOT: Record<SessionStatus, BnotColor> = {
   active: "blue",
   waitingApproval: "orange",
   waitingAnswer: "cyan",

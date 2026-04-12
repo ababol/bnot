@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { BuddyColor, BuddyTraits } from "../lib/colors";
+import type { BnotColor, BnotTraits } from "../lib/colors";
 import { BRIGHT_COLORS, MAIN_COLORS } from "../lib/colors";
 
 interface Props {
-  color: BuddyColor;
+  color: BnotColor;
   isActive: boolean;
-  traits?: BuddyTraits;
+  traits?: BnotTraits;
   size?: "sm" | "lg";
 }
 
@@ -17,7 +17,7 @@ const SIZE: Record<
   lg: { canvasW: 48, canvasH: 42, displayW: 22, displayH: 19 },
 };
 
-export default function PixelBuddy({ color, isActive, traits, size = "sm" }: Props) {
+export default function PixelBnot({ color, isActive, traits, size = "sm" }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [frame, setFrame] = useState(0);
   const [isBlinking, setIsBlinking] = useState(false);

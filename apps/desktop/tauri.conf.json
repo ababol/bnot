@@ -1,20 +1,20 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/main/nicegui/static/tauri/schema.json",
-  "productName": "BuddyNotch",
+  "productName": "Bnot",
   "version": "0.1.0",
-  "identifier": "com.buddynotch.app",
+  "identifier": "com.bnot.app",
   "build": {
     "frontendDist": "../web/dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "pnpm --filter web dev",
-    "beforeBuildCommand": "pnpm --filter web build && pnpm --filter buddynotch-sidecar build && cargo build -p buddy-bridge --release"
+    "beforeBuildCommand": "pnpm --filter web build && pnpm --filter bnot-sidecar build && cargo build -p bnot-bridge --release"
   },
   "app": {
     "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
-        "title": "BuddyNotch",
+        "title": "Bnot",
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
@@ -35,7 +35,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["buddynotch"]
+        "schemes": ["bnot"]
       }
     }
   },
@@ -44,7 +44,7 @@
     "targets": "all",
     "resources": {
       "../../packages/sidecar/dist/index.mjs": "sidecar/index.mjs",
-      "../../target/release/buddy-bridge": "bin/buddy-bridge"
+      "../../target/release/bnot-bridge": "bin/bnot-bridge"
     },
     "icon": [
       "icons/32x32.png",

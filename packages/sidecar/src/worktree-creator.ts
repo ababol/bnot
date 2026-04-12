@@ -149,9 +149,7 @@ export class WorktreeCreator {
       return;
     }
 
-    const commands = Array.isArray(spec)
-      ? spec
-      : [resolvePath(loaded.dir, spec)];
+    const commands = Array.isArray(spec) ? spec : [resolvePath(loaded.dir, spec)];
 
     emit("worktreeStatus", {
       status: "settingUp",

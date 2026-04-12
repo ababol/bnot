@@ -4,11 +4,11 @@ import { useSession } from "../context/session-context";
 import { contextPercent, isWorking } from "../context/types";
 import { useHeroSession } from "../hooks/use-hero-session";
 import { useTimer } from "../hooks/use-timer";
-import type { BuddyColor } from "../lib/colors";
-import { buddyTraitsFromId, MAIN_COLORS, parseBuddyColor, sessionStatusDot } from "../lib/colors";
+import type { BnotColor } from "../lib/colors";
+import { bnotTraitsFromId, MAIN_COLORS, parseBnotColor, sessionStatusDot } from "../lib/colors";
 import { setPanelState } from "../lib/tauri";
 import PixelBell from "./pixel-bell";
-import PixelBuddy from "./pixel-buddy";
+import PixelBnot from "./pixel-bnot";
 import StatusIndicator from "./status-indicator";
 
 interface Props {
@@ -25,15 +25,15 @@ export default function CompactView({ notchWidth }: Props) {
   );
   const notchGap = notchWidth + 16;
   const heroPct = heroSession ? contextPercent(heroSession) : 0;
-  const barColor: BuddyColor = heroPct > 0.85 ? "red" : heroPct > 0.6 ? "orange" : "green";
+  const barColor: BnotColor = heroPct > 0.85 ? "red" : heroPct > 0.6 ? "orange" : "green";
   const heroSuffix = heroSession ? (heroSession.gitWorktree ?? heroSession.gitBranch ?? "") : "";
   const heroTraits = heroSession
-    ? buddyTraitsFromId(heroSession.workingDirectory + heroSuffix, heroSuffix || undefined)
+    ? bnotTraitsFromId(heroSession.workingDirectory + heroSuffix, heroSuffix || undefined)
     : undefined;
   const now = useTimer();
   const heroIsWorking = heroSession ? isWorking(heroSession, now) : false;
-  const heroColor: BuddyColor =
-    parseBuddyColor(heroSession?.agentColor) ?? heroTraits?.color ?? "gray";
+  const heroColor: BnotColor =
+    parseBnotColor(heroSession?.agentColor) ?? heroTraits?.color ?? "gray";
   const heroDot = heroSession
     ? sessionStatusDot(heroSession.status, heroIsWorking, heroSession.sessionMode)
     : undefined;
@@ -50,12 +50,8 @@ export default function CompactView({ notchWidth }: Props) {
 
   const hoverTimer = useRef<number | null>(null);
   const openOverview = () => {
-    const pendingApproval = Object.values(sessions).some(
-      (s) => s.status === "waitingApproval",
-    );
-    const pendingQuestion = Object.values(sessions).some(
-      (s) => s.status === "waitingAnswer",
-    );
+    const pendingApproval = Object.values(sessions).some((s) => s.status === "waitingApproval");
+    const pendingQuestion = Object.values(sessions).some((s) => s.status === "waitingAnswer");
     const target = pendingApproval ? "approval" : pendingQuestion ? "ask" : "overview";
     setPanelState(dispatch, target);
   };
@@ -115,7 +111,7 @@ export default function CompactView({ notchWidth }: Props) {
               />
             </div>
           )}
-          <PixelBuddy color={heroColor} isActive={heroIsWorking} traits={heroTraits} size="lg" />
+          <PixelBnot color={heroColor} isActive={heroIsWorking} traits={heroTraits} size="lg" />
           {heroDot && (
             <div className="ml-0.5">
               <StatusIndicator dot={heroDot} size="lg" />

@@ -1,4 +1,4 @@
-# CLAUDE.md — BuddyNotch
+# CLAUDE.md — Bnot
 
 ## Build & Run
 
@@ -14,13 +14,13 @@ Requires: macOS 14+, Rust (rustup), Node.js 22+, pnpm.
 ## Project Structure
 
 ```
-buddynotch/
+bnot/
   apps/
     desktop/            # Tauri v2 Rust core
       src/              # main.rs, lib.rs, commands.rs, window.rs, notch.rs, keyboard.rs, sidecar.rs
     web/                # React 19 + TypeScript + Tailwind v4 frontend
       src/
-        components/     # notch-content, compact-view, overview-view, session-card, pixel-buddy, etc.
+        components/     # notch-content, compact-view, overview-view, session-card, pixel-bnot, etc.
         context/        # session-context.tsx (useReducer + Context), types.ts
         hooks/          # use-tauri-events.ts, use-timer.ts, use-hero-session.ts
         lib/            # colors.ts, format.ts, tauri.ts
@@ -39,7 +39,7 @@ buddynotch/
 ### Data Flow
 
 ```
-Claude Code hooks → buddy-bridge (Rust CLI) → Unix socket → Sidecar
+Claude Code hooks → bnot-bridge (Rust CLI) → Unix socket → Sidecar
 Sidecar → stdout NDJSON events → Tauri Rust → app.emit() → React frontend
 React → invoke() → Tauri commands → Sidecar stdin NDJSON requests
 ```
@@ -91,7 +91,7 @@ State changes always go through `setPanelState(dispatch, state)` in `lib/tauri.t
 
 **`lib/format.ts`** — `formatElapsed()`, `formatIdle()`, `formatRelativeTime()`, `shortenPath()`, `tokenShort()`. All time/path/token formatting lives here.
 
-**`lib/colors.ts`** — `sessionStatusColor()` maps status+cpu to BuddyColor. `parseBuddyColor()` validates strings from the backend. `buddyTraitsFromId()` generates deterministic buddy appearance from hash.
+**`lib/colors.ts`** — `sessionStatusColor()` maps status+cpu to BnotColor. `parseBnotColor()` validates strings from the backend. `bnotTraitsFromId()` generates deterministic bnot appearance from hash.
 
 **`context/types.ts`** — `directoryName()`, `isIdle()`, `projectName()`, `contextPercent()`. Derived helpers for session data.
 
@@ -103,7 +103,7 @@ State changes always go through `setPanelState(dispatch, state)` in `lib/tauri.t
 
 - Plugin: `@tailwindcss/vite` in `apps/web/vite.config.ts`
 - CSS entry: `apps/web/src/index.css` with `@import "tailwindcss"` + `@theme` block
-- Custom tokens: `--color-buddy-green`, `--color-surface`, `--color-text-dim`, etc.
+- Custom tokens: `--color-bnot-green`, `--color-surface`, `--color-text-dim`, etc.
 - Do NOT add `* { margin: 0; padding: 0; }` outside Tailwind layers — it overrides utility classes.
 
 ## TypeScript
@@ -126,7 +126,7 @@ Sidecar -> Tauri:  {"event":"tauriCommand", "data":{"method":"activate_app", "pa
 
 ## Claude Code Hooks
 
-Auto-installed to `~/.claude/settings.json` on startup via `hook-installer.ts`. Bridge binary reads hook JSON from stdin, sends NDJSON to `~/.buddy-notch/buddy.sock`, exits 0.
+Auto-installed to `~/.claude/settings.json` on startup via `hook-installer.ts`. Bridge binary reads hook JSON from stdin, sends NDJSON to `~/.bnot/bnot.sock`, exits 0.
 
 For dangerous tools (Bash, Edit, Write, NotebookEdit, MultiEdit), bridge blocks and waits for approval response from sidecar (120s timeout). For safe tools, it's fire-and-forget.
 
@@ -139,9 +139,9 @@ Constants in `context-scanner.ts`: `ESTIMATION_RATIO=0.85`, `OVER_RATIO_OFFSET=0
 
 ## Runtime Files
 
-- `~/.buddy-notch/buddy.sock` — Unix domain socket (sidecar <-> bridge)
-- `~/.buddy-notch/buddy.pid` — PID file
-- `~/.buddy-notch/config.json` — Project directories config
+- `~/.bnot/bnot.sock` — Unix domain socket (sidecar <-> bridge)
+- `~/.bnot/bnot.pid` — PID file
+- `~/.bnot/config.json` — Project directories config
 - `~/.claude/settings.json` — Claude Code hooks
 - `~/.claude/sessions/*.json` — Session metadata
 - `~/.claude/projects/<key>/<sessionId>.jsonl` — Conversation data
@@ -150,12 +150,12 @@ Constants in `context-scanner.ts`: `ESTIMATION_RATIO=0.85`, `OVER_RATIO_OFFSET=0
 
 ```bash
 # Send a fake hook event
-echo '{"session_id":"test","tool_name":"Edit","tool_input":{"file_path":"test.ts"},"hookEventName":"PreToolUse","cwd":"/tmp"}' | ./target/debug/buddy-bridge pre-tool
+echo '{"session_id":"test","tool_name":"Edit","tool_input":{"file_path":"test.ts"},"hookEventName":"PreToolUse","cwd":"/tmp"}' | ./target/debug/bnot-bridge pre-tool
 
 # Test socket directly (requires app running)
 node -e "
 const net = require('net');
-const sock = net.createConnection(process.env.HOME + '/.buddy-notch/buddy.sock', () => {
+const sock = net.createConnection(process.env.HOME + '/.bnot/bnot.sock', () => {
   sock.write(JSON.stringify({type:'sessionStart',sessionId:'test',timestamp:new Date().toISOString(),payload:{sessionStart:{workingDirectory:'/tmp'}}}) + '\n');
   setTimeout(() => sock.end(), 200);
 });

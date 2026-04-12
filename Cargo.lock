@@ -204,6 +204,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "bnot"
+version = "0.1.0"
+dependencies = [
+ "core-graphics 0.24.0",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-deep-link",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-shell",
+ "url",
+]
+
+[[package]]
+name = "bnot-bridge"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "libc",
+ "serde",
+ "serde_json",
+ "similar",
+]
+
+[[package]]
 name = "brotli"
 version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -222,36 +252,6 @@ checksum = "874bb8112abecc98cbd6d81ea4fa7e94fb9449648c93cc89aa40c81c24d7de03"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
-]
-
-[[package]]
-name = "buddy-bridge"
-version = "0.1.0"
-dependencies = [
- "clap",
- "libc",
- "serde",
- "serde_json",
- "similar",
-]
-
-[[package]]
-name = "buddynotch"
-version = "0.1.0"
-dependencies = [
- "core-graphics 0.24.0",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-deep-link",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-shell",
- "url",
 ]
 
 [[package]]

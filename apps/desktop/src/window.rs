@@ -162,7 +162,7 @@ pub fn make_key_window<R: Runtime>(window: &WebviewWindow<R>) {
 
 /// Show the window without activating the application or making it key.
 /// Use instead of `win.show()` (which calls `makeKeyAndOrderFront:`) so that
-/// BuddyNotch never steals focus — critical when launched from Finder where
+/// Bnot never steals focus — critical when launched from Finder where
 /// the app briefly becomes frontmost before the Accessory policy takes effect.
 pub fn show_without_activation<R: Runtime>(window: &WebviewWindow<R>) {
     #[cfg(target_os = "macos")]
