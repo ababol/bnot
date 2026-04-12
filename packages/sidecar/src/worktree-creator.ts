@@ -1,4 +1,7 @@
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
+import { readFile } from "fs/promises";
+import { platform } from "os";
+import { dirname, resolve as resolvePath } from "path";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
 import { RepoFinder } from "./repo-finder.js";
@@ -6,6 +9,14 @@ import { detectRunningTerminal } from "./terminal-jumper.js";
 import { escapeShell } from "./terminal-utils.js";
 
 const exec = promisify(execFile);
+
+interface CursorWorktreeConfig {
+  "setup-worktree"?: string | string[];
+  "setup-worktree-unix"?: string | string[];
+  "setup-worktree-windows"?: string | string[];
+}
+
+const SETUP_COMMAND_TIMEOUT_MS = 120_000;
 
 export interface WorktreeRequest {
   owner: string;
@@ -115,6 +126,9 @@ export class WorktreeCreator {
       return { success: false, error: msg };
     }
 
+    // 5.5 Run Cursor-style setup (best-effort; failures don't abort)
+    await this.runCursorSetup(worktreePath, repoPath);
+
     // 6. Open terminal
     await openTerminal(worktreePath);
     emit("worktreeStatus", {
@@ -123,6 +137,42 @@ export class WorktreeCreator {
       path: worktreePath,
     });
     return { success: true, path: worktreePath };
+  }
+
+  private async runCursorSetup(worktreePath: string, repoPath: string): Promise<void> {
+    const loaded = await loadCursorConfig(worktreePath, repoPath);
+    if (!loaded) return;
+
+    const spec = pickSetupSpec(loaded.config);
+    if (!spec) {
+      process.stderr.write(`[worktree-setup] no setup key for this platform, skipping\n`);
+      return;
+    }
+
+    const commands = Array.isArray(spec)
+      ? spec
+      : [resolvePath(loaded.dir, spec)];
+
+    emit("worktreeStatus", {
+      status: "settingUp",
+      message: `Running setup (${commands.length} step${commands.length === 1 ? "" : "s"})…`,
+      path: worktreePath,
+    });
+
+    for (const cmd of commands) {
+      try {
+        await runShellCommand(cmd, worktreePath, repoPath);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[worktree-setup] command failed: ${msg}\n`);
+        emit("worktreeStatus", {
+          status: "setupFailed",
+          message: `Setup failed: ${msg}`,
+          path: worktreePath,
+        });
+        return;
+      }
+    }
   }
 
   private async findExistingWorktree(
@@ -134,6 +184,7 @@ export class WorktreeCreator {
         timeout: 5000,
       });
 
+      const mainPath = resolvePath(repoPath);
       let currentPath = "";
       for (const line of stdout.split("\n")) {
         if (line.startsWith("worktree ")) {
@@ -141,8 +192,7 @@ export class WorktreeCreator {
         } else if (line.startsWith("branch ")) {
           const ref = line.slice("branch ".length); // refs/heads/branch-name
           const branchName = ref.replace("refs/heads/", "");
-          // Only match dedicated worktrees (in .claude/worktrees/), not the main repo
-          if (branchName === branch && currentPath.includes("/.claude/worktrees/")) {
+          if (branchName === branch && resolvePath(currentPath) !== mainPath) {
             return { path: currentPath, branch: branchName };
           }
         }
@@ -169,6 +219,63 @@ function sanitizeBranchName(branch: string): string {
     .replace(/[^a-zA-Z0-9._-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+async function loadCursorConfig(
+  worktreePath: string,
+  repoPath: string,
+): Promise<{ dir: string; config: CursorWorktreeConfig } | null> {
+  const candidates = [
+    `${worktreePath}/.cursor/worktrees.json`,
+    `${repoPath}/.cursor/worktrees.json`,
+  ];
+
+  for (const path of candidates) {
+    try {
+      const raw = await readFile(path, "utf8");
+      const config = JSON.parse(raw) as CursorWorktreeConfig;
+      process.stderr.write(`[worktree-setup] loaded config from ${path}\n`);
+      return { dir: dirname(path), config };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      process.stderr.write(`[worktree-setup] failed to read ${path}: ${err}\n`);
+    }
+  }
+  return null;
+}
+
+function pickSetupSpec(config: CursorWorktreeConfig): string | string[] | null {
+  const isWindows = platform() === "win32";
+  const specific = isWindows ? config["setup-worktree-windows"] : config["setup-worktree-unix"];
+  return specific ?? config["setup-worktree"] ?? null;
+}
+
+function runShellCommand(command: string, cwd: string, repoPath: string): Promise<void> {
+  return new Promise((resolvePromise, reject) => {
+    process.stderr.write(`[worktree-setup] $ ${command}\n`);
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      env: { ...process.env, ROOT_WORKTREE_PATH: repoPath },
+      timeout: SETUP_COMMAND_TIMEOUT_MS,
+    });
+
+    const chunks: string[] = [];
+    child.stdout?.on("data", (d: Buffer) => chunks.push(d.toString()));
+    child.stderr?.on("data", (d: Buffer) => chunks.push(d.toString()));
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      const output = chunks.join("");
+      if (output) process.stderr.write(`[worktree-setup] ${output.trimEnd()}\n`);
+      if (code === 0) {
+        resolvePromise();
+      } else {
+        const tail = output.trim().split("\n").slice(-3).join(" | ");
+        reject(new Error(`"${command}" exited with code ${code}${tail ? `: ${tail}` : ""}`));
+      }
+    });
+  });
 }
 
 async function openTerminal(dir: string): Promise<void> {
