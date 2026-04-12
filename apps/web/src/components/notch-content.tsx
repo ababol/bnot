@@ -1,15 +1,9 @@
 import { useSession } from "../context/session-context";
+import type { NotchGeometry } from "../context/types";
 import CompactView from "./compact-view";
 import ContextMenu from "./context-menu";
 import JumpView from "./jump-view";
 import OverviewView from "./overview-view";
-
-interface NotchGeometry {
-  centerX: number;
-  topY: number;
-  notchWidth: number;
-  notchHeight: number;
-}
 
 export default function NotchContent({ geometry }: { geometry: NotchGeometry }) {
   const { state } = useSession();

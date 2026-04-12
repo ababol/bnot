@@ -17,7 +17,7 @@ Requires: macOS 14+, Rust (rustup), Node.js 22+, pnpm.
 buddynotch/
   apps/
     desktop/            # Tauri v2 Rust core
-      src/              # lib.rs, commands.rs, window.rs, notch.rs, keyboard.rs, sidecar.rs, tray.rs
+      src/              # main.rs, lib.rs, commands.rs, window.rs, notch.rs, keyboard.rs, sidecar.rs
     web/                # React 19 + TypeScript + Tailwind v4 frontend
       src/
         components/     # notch-content, compact-view, overview-view, session-card, pixel-buddy, etc.
@@ -46,17 +46,20 @@ React → invoke() → Tauri commands → Sidecar stdin NDJSON requests
 
 ### Panel States
 
-5 states managed by `SessionContext` reducer: `compact`, `overview`, `approval`, `ask`, `jump`.
+6 states managed by `SessionContext` reducer: `compact`, `alert`, `overview`, `approval`, `ask`, `jump`. `alert` is a widened `compact` used to flag pending approvals/questions via the bell pixel.
 
 State changes always go through `setPanelState(dispatch, state)` in `lib/tauri.ts`, which dispatches to React and invokes the Rust backend in one call.
 
 ### Tauri Commands (commands.rs)
 
-`get_notch_geometry`, `set_panel_state`, `jump_to_session`, `approve_session`, `deny_session`, `resume_session`, `send_goto_tab`, `navigate_pane`, `activate_app`.
+- Window/navigation: `get_notch_geometry`, `set_panel_state`, `send_goto_tab`, `navigate_pane`, `activate_app`
+- Session: `jump_to_session`, `resume_session`, `answer_question`
+- Approval: `approve_session`, `approve_session_always`, `deny_session`, `accept_edits_session`, `bypass_permissions_session`
+- System: `open_settings`, `quit_app`
 
 ### Sidecar IPC Methods (index.ts)
 
-`getStatus`, `jumpToSession`, `approveSession`, `denySession`, `openWorktree`, `resumeSession`.
+`getStatus`, `jumpToSession`, `answerQuestion`, `approveSession`, `approveSessionAlways`, `denySession`, `acceptEditsSession`, `bypassPermissionsSession`, `openWorktree`, `resumeSession`.
 
 ### Key Session Fields (types.ts)
 

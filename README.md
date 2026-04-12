@@ -21,12 +21,12 @@ https://github.com/user-attachments/assets/placeholder
 
 ## Tech Stack
 
-| Layer    | Technology                              | Purpose                                                                               |
-| -------- | --------------------------------------- | ------------------------------------------------------------------------------------- |
-| Frontend | React 19 + TypeScript + Tailwind CSS v4 | UI rendered in Tauri WebView                                                          |
-| Native   | Tauri v2 (Rust)                         | Window management, notch detection via objc2, CGEvent keyboard injection, system tray |
-| Backend  | Node.js sidecar (TypeScript)            | Process scanning, context estimation, session management, Unix socket server          |
-| Bridge   | Rust CLI binary                         | Claude Code hook handler — reads stdin, writes to Unix socket, exits fast             |
+| Layer    | Technology                              | Purpose                                                                                  |
+| -------- | --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Frontend | React 19 + TypeScript + Tailwind CSS v4 | UI rendered in Tauri WebView                                                             |
+| Native   | Tauri v2 (Rust)                         | Window management, notch detection via objc2, CGEvent keyboard injection, hover tracking |
+| Backend  | Node.js sidecar (TypeScript)            | Process scanning, context estimation, session management, Unix socket server             |
+| Bridge   | Rust CLI binary                         | Claude Code hook handler — reads stdin, writes to Unix socket, exits fast                |
 
 ## Architecture
 
@@ -91,16 +91,15 @@ buddynotch/
     desktop/                # Tauri v2 Rust core
       src/
         lib.rs              # App setup, deep-link handler
-        commands.rs         # 9 Tauri IPC commands
-        window.rs           # NSAnimationContext transitions, acceptsFirstMouse swizzle
+        commands.rs         # 15 Tauri IPC commands (navigation, session, approval, system)
+        window.rs           # NSAnimationContext transitions, acceptsFirstMouse swizzle, hover watcher
         notch.rs            # NSScreen notch geometry detection
         keyboard.rs         # CGEvent injection for Ghostty tab/pane navigation
         sidecar.rs          # Node.js child process lifecycle
-        tray.rs             # System tray menu + pixel-art icon
     web/                    # React + Tailwind frontend
       src/
-        components/         # compact-view, overview-view, session-card, approval-view,
-                            # ask-view, jump-view, pixel-buddy, pixel-progress-bar, diff-view
+        components/         # compact-view, overview-view, session-card, jump-view,
+                            # pixel-buddy, pixel-progress-bar, diff-view, context-menu
         context/            # SessionContext (useReducer), types, derived helpers
         hooks/              # use-tauri-events, use-timer, use-hero-session
         lib/                # colors (buddy traits), format (time/tokens), tauri (IPC wrappers)
@@ -161,7 +160,7 @@ The config file at `~/.buddy-notch/config.json` controls which directories are s
 }
 ```
 
-Edit via the system tray menu (Settings...) or directly.
+Edit via the gear icon in the overview panel or the right-click context menu on the notch.
 
 ## Browser Extension
 

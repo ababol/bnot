@@ -1,7 +1,46 @@
+import type { BuddyColor } from "../lib/colors";
+
 export type SessionStatus = "active" | "waitingApproval" | "waitingAnswer" | "completed" | "error";
 export type SessionMode = "normal" | "plan" | "auto" | "dangerous";
 
 export type PanelState = "compact" | "alert" | "overview" | "approval" | "ask" | "jump";
+
+export interface NotchGeometry {
+  centerX: number;
+  topY: number;
+  notchWidth: number;
+  notchHeight: number;
+}
+
+export const STATUS_TEXT_COLORS: Record<SessionStatus, string> = {
+  active: "text-buddy-green",
+  waitingApproval: "text-buddy-orange",
+  waitingAnswer: "text-buddy-cyan",
+  completed: "text-buddy-blue",
+  error: "text-buddy-red",
+};
+
+export const STATUS_BUDDY: Record<SessionStatus, BuddyColor> = {
+  active: "blue",
+  waitingApproval: "orange",
+  waitingAnswer: "cyan",
+  completed: "green",
+  error: "orange",
+};
+
+export const STATUS_TEXT: Record<SessionStatus, string> = {
+  active: "Working...",
+  waitingApproval: "Needs approval",
+  waitingAnswer: "Asking question",
+  completed: "Completed",
+  error: "Error",
+};
+
+export const MODE_BADGE: Record<string, { label: string; bg: string; text: string }> = {
+  plan: { label: "PLAN", bg: "bg-[#1a3a3a]", text: "text-[#6abfbf]" },
+  auto: { label: "AUTO", bg: "bg-[#3a3520]", text: "text-[#bfaa5a]" },
+  dangerous: { label: "YOLO", bg: "bg-[#3a2020]", text: "text-[#bf6a6a]" },
+};
 
 export interface ApprovalRequest {
   toolName: string;

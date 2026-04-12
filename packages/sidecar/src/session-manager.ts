@@ -227,7 +227,7 @@ export class SessionManager {
    */
   tryInjectColor(session: AgentSession) {
     if (this.coloredSessions.has(session.id)) return;
-    this._doInjectColor(session);
+    void this._doInjectColor(session);
   }
 
   private async _doInjectColor(session: AgentSession) {

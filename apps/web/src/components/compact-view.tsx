@@ -75,8 +75,7 @@ export default function CompactView({ notchWidth }: Props) {
       unlisten?.();
       handleLeave();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dispatch]);
 
   return (
     <div

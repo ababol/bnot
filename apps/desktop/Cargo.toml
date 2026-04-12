@@ -20,11 +20,8 @@ objc2-app-kit = { version = "0.3", features = [
     "NSScreen",
     "NSApplication",
     "NSRunningApplication",
-    "NSWorkspace",
-    "NSGraphics",
 ] }
 core-graphics = "0.24"
-core-graphics-types = "0.2"
 
 [lib]
 name = "buddynotch_lib"

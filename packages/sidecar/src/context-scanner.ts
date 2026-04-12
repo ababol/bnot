@@ -226,7 +226,7 @@ export class ContextScanner {
           continue;
         }
 
-        this.queryExactContext(sessionId, cwd);
+        void this.queryExactContext(sessionId, cwd);
       } catch {
         // ignore
       }

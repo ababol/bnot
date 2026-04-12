@@ -1,8 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useSession } from "../context/session-context";
-import type { AgentSession, SessionStatus } from "../context/types";
-import { contextPercent, directoryName, isIdle, isWorking } from "../context/types";
+import type { AgentSession } from "../context/types";
+import {
+  contextPercent,
+  directoryName,
+  isIdle,
+  isWorking,
+  MODE_BADGE,
+  STATUS_BUDDY,
+  STATUS_TEXT,
+  STATUS_TEXT_COLORS,
+} from "../context/types";
 import { useTimer } from "../hooks/use-timer";
 import type { BuddyColor } from "../lib/colors";
 import { buddyTraitsFromId, parseBuddyColor, sessionStatusDot } from "../lib/colors";
@@ -18,36 +27,6 @@ interface Props {
   isHero: boolean;
   onClick: () => void;
 }
-
-const STATUS_TEXT_COLORS: Record<SessionStatus, string> = {
-  active: "text-buddy-green",
-  waitingApproval: "text-buddy-orange",
-  waitingAnswer: "text-buddy-cyan",
-  completed: "text-buddy-blue",
-  error: "text-buddy-red",
-};
-
-const STATUS_BUDDY: Record<SessionStatus, BuddyColor> = {
-  active: "blue",
-  waitingApproval: "orange",
-  waitingAnswer: "cyan",
-  completed: "green",
-  error: "orange",
-};
-
-const STATUS_TEXT: Record<SessionStatus, string> = {
-  active: "Working...",
-  waitingApproval: "Needs approval",
-  waitingAnswer: "Asking question",
-  completed: "Completed",
-  error: "Error",
-};
-
-const MODE_BADGE: Record<string, { label: string; bg: string; text: string }> = {
-  plan: { label: "PLAN", bg: "bg-[#1a3a3a]", text: "text-[#6abfbf]" },
-  auto: { label: "AUTO", bg: "bg-[#3a3520]", text: "text-[#bfaa5a]" },
-  dangerous: { label: "YOLO", bg: "bg-[#3a2020]", text: "text-[#bf6a6a]" },
-};
 
 export default function SessionCard({ session, isHero, onClick }: Props) {
   const { dispatch } = useSession();
@@ -146,7 +125,9 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
         <div className="shrink-0 font-mono text-[10px] text-text-dim">
           {idle ? formatIdle(elapsed) : formatElapsed(elapsed)}
         </div>
-        {(session.status === "waitingApproval" || session.status === "waitingAnswer") && <PixelBell />}
+        {(session.status === "waitingApproval" || session.status === "waitingAnswer") && (
+          <PixelBell />
+        )}
       </div>
 
       {/* ExitPlanMode UI — plan review with feedback */}
@@ -178,12 +159,8 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
                     <span className="font-semibold text-white/70">
                       {approval.filePath ? shortenPath(approval.filePath) : "file"}
                     </span>
-                    {stats.added > 0 && (
-                      <span className="text-buddy-green">+{stats.added}</span>
-                    )}
-                    {stats.removed > 0 && (
-                      <span className="text-buddy-red">-{stats.removed}</span>
-                    )}
+                    {stats.added > 0 && <span className="text-buddy-green">+{stats.added}</span>}
+                    {stats.removed > 0 && <span className="text-buddy-red">-{stats.removed}</span>}
                   </div>
                 );
               })()}
@@ -262,7 +239,9 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
                 <div className="flex-1">
                   <div className="text-[12px] font-medium text-white">{option}</div>
                   {question.optionDescriptions?.[i] && (
-                    <div className="text-[10px] text-white/50">{question.optionDescriptions[i]}</div>
+                    <div className="text-[10px] text-white/50">
+                      {question.optionDescriptions[i]}
+                    </div>
                   )}
                 </div>
                 <span className="text-[11px] text-white/30">{"\u203A"}</span>
@@ -321,7 +300,13 @@ interface ExitPlanModeUIProps {
   onFeedback: (text: string) => void;
 }
 
-function ExitPlanModeUI({ plan, onApprove, onAcceptEdits, onBypass, onFeedback }: ExitPlanModeUIProps) {
+function ExitPlanModeUI({
+  plan,
+  onApprove,
+  onAcceptEdits,
+  onBypass,
+  onFeedback,
+}: ExitPlanModeUIProps) {
   const [feedback, setFeedback] = useState("");
 
   return (

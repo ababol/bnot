@@ -114,7 +114,6 @@ export default function PixelBuddy({ color, isActive, traits, dot }: Props) {
       fill(6, 7, dotColor);
       fill(7, 7, dotColor);
     }
-
   }, [frame, color, isActive, traits, dot]);
 
   const bobY = isActive ? (frame % 6 < 3 ? -0.5 : 0.5) : 0;

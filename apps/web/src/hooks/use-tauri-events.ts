@@ -10,7 +10,14 @@ interface SessionsUpdatedPayload {
   heroId: string | null;
 }
 
-const VALID_PANEL_STATES: Set<string> = new Set(["compact", "alert", "overview", "approval", "ask", "jump"]);
+const VALID_PANEL_STATES: Set<string> = new Set([
+  "compact",
+  "alert",
+  "overview",
+  "approval",
+  "ask",
+  "jump",
+]);
 
 export function useTauriEvents(dispatch: React.Dispatch<SessionAction>, panelState: string) {
   useEffect(() => {

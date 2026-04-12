@@ -12,7 +12,10 @@ const REQUIRED_HOOKS: Record<string, string> = {
   Stop: "stop",
 };
 
-type HookEntry = { matcher?: string; hooks?: Array<{ command?: string; timeout?: number; type?: string }> };
+type HookEntry = {
+  matcher?: string;
+  hooks?: Array<{ command?: string; timeout?: number; type?: string }>;
+};
 
 export async function installHooksIfNeeded(bridgePath?: string) {
   const bridge = bridgePath ?? (await findBridgePath());

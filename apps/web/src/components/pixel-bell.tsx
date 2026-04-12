@@ -41,13 +41,32 @@ export default function PixelBell() {
     //  ######
     // ########
     //    ##
-    fill(2, 0); fill(3, 0);
-    fill(1, 1); fill(2, 1); fill(3, 1); fill(4, 1);
-    fill(1, 2); fill(2, 2); fill(3, 2); fill(4, 2);
-    fill(1, 3); fill(2, 3); fill(3, 3); fill(4, 3);
-    fill(1, 4); fill(2, 4); fill(3, 4); fill(4, 4);
-    fill(0, 5); fill(1, 5); fill(2, 5); fill(3, 5); fill(4, 5); fill(5, 5);
-    fill(2, 6); fill(3, 6);
+    fill(2, 0);
+    fill(3, 0);
+    fill(1, 1);
+    fill(2, 1);
+    fill(3, 1);
+    fill(4, 1);
+    fill(1, 2);
+    fill(2, 2);
+    fill(3, 2);
+    fill(4, 2);
+    fill(1, 3);
+    fill(2, 3);
+    fill(3, 3);
+    fill(4, 3);
+    fill(1, 4);
+    fill(2, 4);
+    fill(3, 4);
+    fill(4, 4);
+    fill(0, 5);
+    fill(1, 5);
+    fill(2, 5);
+    fill(3, 5);
+    fill(4, 5);
+    fill(5, 5);
+    fill(2, 6);
+    fill(3, 6);
   }, [frame]);
 
   // Subtle swing animation

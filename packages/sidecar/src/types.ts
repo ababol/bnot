@@ -76,13 +76,7 @@ export interface StopPayload {
 }
 
 export interface ApprovalResponse {
-  action:
-    | "allow"
-    | "allowAlways"
-    | "deny"
-    | "answer"
-    | "acceptEdits"
-    | "bypassPermissions";
+  action: "allow" | "allowAlways" | "deny" | "answer" | "acceptEdits" | "bypassPermissions";
   answerLabel?: string;
   questionText?: string;
   feedback?: string;

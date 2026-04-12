@@ -2,14 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import NotchContent from "./components/notch-content";
 import { SessionProvider, useSession } from "./context/session-context";
+import type { NotchGeometry } from "./context/types";
 import { useTauriEvents } from "./hooks/use-tauri-events";
-
-interface NotchGeometry {
-  centerX: number;
-  topY: number;
-  notchWidth: number;
-  notchHeight: number;
-}
 
 function AppInner() {
   const [geometry, setGeometry] = useState<NotchGeometry | null>(null);

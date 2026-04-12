@@ -22,11 +22,7 @@ export default function DiffView({ diff }: Props) {
         const isRemove = line.startsWith("-") && !line.startsWith("---");
         const isContext = line.startsWith(" ");
 
-        const bgClass = isAdd
-          ? "bg-buddy-green/15"
-          : isRemove
-            ? "bg-buddy-red/15"
-            : "";
+        const bgClass = isAdd ? "bg-buddy-green/15" : isRemove ? "bg-buddy-red/15" : "";
 
         const textClass = isAdd
           ? "text-buddy-green"
@@ -51,9 +47,7 @@ export default function DiffView({ diff }: Props) {
             <span className={`w-8 shrink-0 pr-2 text-right text-[11px] ${numClass}`}>
               {currentNum}
             </span>
-            <span className={`whitespace-pre-wrap break-all text-[11px] ${textClass}`}>
-              {line}
-            </span>
+            <span className={`whitespace-pre-wrap break-all text-[11px] ${textClass}`}>{line}</span>
           </div>
         );
       })}

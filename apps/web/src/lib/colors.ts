@@ -144,13 +144,6 @@ export function sessionStatusDot(
   return "idle";
 }
 
-/** Buddy body color based on context fill percent: green -> yellow -> red */
-export function contextColor(percent: number): string {
-  if (percent > 0.85) return "rgb(255, 51, 51)"; // red: <15% remaining
-  if (percent > 0.6) return "rgb(255, 191, 26)"; // yellow: >60% used
-  return "rgb(74, 222, 128)"; // green: plenty of space
-}
-
 export function buddyColorFromSessions(sessions: Record<string, { status: string }>): BuddyColor {
   const vals = Object.values(sessions);
   if (vals.some((s) => s.status === "waitingApproval")) return "orange";
