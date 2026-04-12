@@ -16,7 +16,7 @@ import { useTimer } from "../hooks/use-timer";
 import type { BuddyColor } from "../lib/colors";
 import { buddyTraitsFromId, parseBuddyColor, sessionStatusDot } from "../lib/colors";
 import { formatElapsed, formatIdle, shortenPath, tokenShort } from "../lib/format";
-import { setPanelState } from "../lib/tauri";
+import { collapsePanel } from "../lib/tauri";
 import DiffView, { diffStats } from "./diff-view";
 import PixelBell from "./pixel-bell";
 import PixelBuddy from "./pixel-buddy";
@@ -30,7 +30,14 @@ interface Props {
 }
 
 export default function SessionCard({ session, isHero, onClick }: Props) {
-  const { dispatch } = useSession();
+  const { state, dispatch } = useSession();
+  // Collapse based on the sessions that remain after this one is resolved, so
+  // we go straight to the right target (alert if others still need attention,
+  // compact otherwise) rather than bouncing through compact first.
+  const collapseAfterAction = () => {
+    const { [session.id]: _resolved, ...rest } = state.sessions;
+    collapsePanel(dispatch, rest);
+  };
   const now = useTimer();
   const repoName = session.gitRepoName ?? directoryName(session);
   const suffix = session.gitWorktree ?? session.gitBranch;
@@ -49,7 +56,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
 
   const selectOption = (index: number) => {
     invoke("answer_question", { sessionId: session.id, optionIndex: index });
-    setPanelState(dispatch, "compact");
+    collapseAfterAction();
   };
 
   const handleOptionClick = (e: React.MouseEvent, index: number) => {
@@ -73,36 +80,36 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
   const handleApprove = (e: React.MouseEvent) => {
     e.stopPropagation();
     invoke("approve_session", { sessionId: session.id });
-    setPanelState(dispatch, "compact");
+    collapseAfterAction();
   };
 
   const handleApproveAlways = (e: React.MouseEvent) => {
     e.stopPropagation();
     invoke("approve_session_always", { sessionId: session.id });
-    setPanelState(dispatch, "compact");
+    collapseAfterAction();
   };
 
   const handleDeny = (e: React.MouseEvent) => {
     e.stopPropagation();
     invoke("deny_session", { sessionId: session.id, feedback: null });
-    setPanelState(dispatch, "compact");
+    collapseAfterAction();
   };
 
   const handleAcceptEdits = (e: React.MouseEvent) => {
     e.stopPropagation();
     invoke("accept_edits_session", { sessionId: session.id });
-    setPanelState(dispatch, "compact");
+    collapseAfterAction();
   };
 
   const handleBypass = (e: React.MouseEvent) => {
     e.stopPropagation();
     invoke("bypass_permissions_session", { sessionId: session.id });
-    setPanelState(dispatch, "compact");
+    collapseAfterAction();
   };
 
   const handleFeedbackSubmit = (text: string) => {
     invoke("deny_session", { sessionId: session.id, feedback: text });
-    setPanelState(dispatch, "compact");
+    collapseAfterAction();
   };
 
   return (

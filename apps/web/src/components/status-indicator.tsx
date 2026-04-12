@@ -15,18 +15,6 @@ const SIZE: Record<
   lg: { display: 20, canvas: 40, grid: 10 },
 };
 
-// Ring of 8 dot positions for the spinner (each 2x2 on a 10x10 grid).
-const SPINNER_POSITIONS: Array<[number, number]> = [
-  [4, 0], // N
-  [7, 1], // NE
-  [8, 4], // E
-  [7, 7], // SE
-  [4, 8], // S
-  [1, 7], // SW
-  [0, 4], // W
-  [1, 1], // NW
-];
-
 // Checkmark pixels on a 10x10 grid.
 const CHECK_PIXELS: Array<[number, number]> = [
   [7, 2],
@@ -63,19 +51,30 @@ const QUESTION_PIXELS: Array<[number, number]> = [
 ];
 
 const SPIN_INTERVAL_MS = 180;
+const ZZZ_INTERVAL_MS = 400;
+
+// Small "z" glyphs staggered diagonally for the idle "sleeping" dot.
+// Each triple is [colOffset, rowOffset, phaseOffset]. The z itself is drawn
+// by the helper below as a 3x3 shape.
+const ZZZ_POSITIONS: Array<[number, number, number]> = [
+  [0, 6, 0], // bottom-left
+  [3, 3, 1], // middle
+  [6, 0, 2], // top-right
+];
 
 export default function StatusIndicator({ dot, size = "sm" }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tick, setTick] = useState(0);
   const { display, canvas, grid } = SIZE[size];
 
-  const animate = dot === "working";
+  const animate = dot === "working" || dot === "idle";
+  const intervalMs = dot === "working" ? SPIN_INTERVAL_MS : ZZZ_INTERVAL_MS;
 
   useEffect(() => {
     if (!animate) return;
-    const id = setInterval(() => setTick((t) => t + 1), SPIN_INTERVAL_MS);
+    const id = setInterval(() => setTick((t) => t + 1), intervalMs);
     return () => clearInterval(id);
-  }, [animate]);
+  }, [animate, intervalMs]);
 
   useEffect(() => {
     const el = canvasRef.current;
@@ -102,10 +101,34 @@ export default function StatusIndicator({ dot, size = "sm" }: Props) {
     };
 
     if (dot === "working") {
-      // Single dot traveling around the ring — no trail, just a moving position
-      const lead = tick % SPINNER_POSITIONS.length;
-      const [x, y] = SPINNER_POSITIONS[lead];
-      fill(x, y, 1);
+      // Solid round dot in the middle; a ring of 8 positions around it spins
+      // via trailing opacity to mimic a loader.
+      const dotPixels: Array<[number, number]> = [
+        [4, 3], [5, 3],
+        [3, 4], [4, 4], [5, 4], [6, 4],
+        [3, 5], [4, 5], [5, 5], [6, 5],
+        [4, 6], [5, 6],
+      ];
+      for (const [x, y] of dotPixels) fillSingle(x, y);
+
+      const rimPositions: Array<[number, number]> = [
+        [4, 0], // N
+        [7, 1], // NE
+        [8, 4], // E
+        [7, 7], // SE
+        [4, 8], // S
+        [1, 7], // SW
+        [0, 4], // W
+        [1, 1], // NW
+      ];
+      const n = rimPositions.length;
+      const lead = tick % n;
+      for (let i = 0; i < n; i++) {
+        const distBehind = (lead - i + n) % n;
+        const alpha = 0.12 + 0.88 * Math.pow(1 - distBehind / n, 1.6);
+        const [x, y] = rimPositions[i];
+        fill(x, y, alpha);
+      }
     } else if (dot === "done") {
       for (const [x, y] of CHECK_PIXELS) fillSingle(x, y);
     } else if (dot === "waiting") {
@@ -119,10 +142,18 @@ export default function StatusIndicator({ dot, size = "sm" }: Props) {
       fillSingle(4, 7);
       fillSingle(5, 7);
     } else {
-      // idle: 4x4 centered block
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = color;
-      ctx.fillRect(3 * px, 3 * px, px * 4, px * 4);
+      // idle: three little "z"s staggered diagonally, breathing softly
+      for (const [col, row, phase] of ZZZ_POSITIONS) {
+        const alpha = 0.35 + 0.55 * ((Math.sin((tick + phase) * 0.8) + 1) / 2);
+        // 3x3 z-shape: top bar, middle diagonal pixel, bottom bar
+        fillSingle(col, row, alpha);
+        fillSingle(col + 1, row, alpha);
+        fillSingle(col + 2, row, alpha);
+        fillSingle(col + 1, row + 1, alpha);
+        fillSingle(col, row + 2, alpha);
+        fillSingle(col + 1, row + 2, alpha);
+        fillSingle(col + 2, row + 2, alpha);
+      }
     }
 
     ctx.globalAlpha = 1;

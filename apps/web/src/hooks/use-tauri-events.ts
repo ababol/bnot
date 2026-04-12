@@ -1,9 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { SessionAction } from "../context/session-context";
 import type { AgentSession, HistorySession, PanelState } from "../context/types";
-import { setPanelState } from "../lib/tauri";
+import { collapsePanel, setPanelState } from "../lib/tauri";
 
 interface SessionsUpdatedPayload {
   sessions: Record<string, AgentSession>;
@@ -18,7 +18,14 @@ const VALID_PANEL_STATES: Set<string> = new Set([
   "ask",
 ]);
 
-export function useTauriEvents(dispatch: React.Dispatch<SessionAction>, panelState: string) {
+export function useTauriEvents(
+  dispatch: React.Dispatch<SessionAction>,
+  panelState: string,
+  sessions: Record<string, AgentSession>,
+) {
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
   useEffect(() => {
     const unlisten: Array<() => void> = [];
 
@@ -64,7 +71,7 @@ export function useTauriEvents(dispatch: React.Dispatch<SessionAction>, panelSta
     win
       .onFocusChanged(({ payload: focused }) => {
         if (!focused) {
-          setPanelState(dispatch, "compact");
+          collapsePanel(dispatch, sessionsRef.current);
         }
       })
       .then((u) => {

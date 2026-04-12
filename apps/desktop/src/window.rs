@@ -28,8 +28,8 @@ pub fn expanded_frame(state: &str, geom: &NotchGeometry) -> (f64, f64, f64, f64)
             return (x, 0.0, w, h);
         }
         "overview" => (geom.notch_width + 380.0, 300.0),
-        "approval" => (geom.notch_width + 380.0, 300.0),
-        "ask" => (geom.notch_width + 380.0, 300.0),
+        "approval" => (geom.notch_width + 380.0, 520.0),
+        "ask" => (geom.notch_width + 380.0, 520.0),
         _ => {
             let (x, w, h) = compact_frame(geom);
             return (x, 0.0, w, h);
@@ -115,7 +115,11 @@ pub fn start_hover_watcher<R: Runtime>(app: AppHandle<R>) {
 
         let Some(geom) = crate::notch::get_notch_geometry() else { continue };
         let (cx, cw, ch) = compact_frame(&geom);
-        let (ex, _, ew, eh) = expanded_frame("overview", &geom);
+        // Use the tallest expanded variant so we don't accidentally fire "zone
+        // exit" when the panel is in approval/ask mode (which is taller than overview).
+        let (ex, _, ew, eh_overview) = expanded_frame("overview", &geom);
+        let (_, _, _, eh_approval) = expanded_frame("approval", &geom);
+        let eh = eh_overview.max(eh_approval);
 
         let Ok(source) = CGEventSource::new(CGEventSourceStateID::HIDSystemState) else { continue };
         let Ok(event) = CGEvent::new(source) else { continue };
@@ -147,6 +151,10 @@ pub fn make_key_window<R: Runtime>(window: &WebviewWindow<R>) {
             return;
         };
         unsafe {
+            // Re-swizzle: the webview loads async, so subviews that existed at
+            // setup time aren't the full hierarchy. Doing it here catches any
+            // later-spawned WebKit view classes so the first click lands.
+            swizzle_accepts_first_mouse(&ns_window);
             let _: () = objc2::msg_send![&ns_window, makeKeyWindow];
         }
     }
@@ -213,16 +221,34 @@ pub fn configure_macos_window<R: Runtime>(window: &WebviewWindow<R>) {
 
 /// Swizzle `acceptsFirstMouse:` on WKWebView and its internal view classes so that
 /// clicks register immediately without requiring the window to be focused first.
-/// Targets classes by name rather than walking the live view hierarchy, so it works
-/// regardless of when the WKWebView finishes loading (fixes production .app builds).
+/// First seeds the known public WebKit classes, then walks the live view hierarchy
+/// and swizzles whatever private subview classes the current macOS build is using —
+/// those names differ between OS releases, so a hard-coded list misses clicks and
+/// forces users to click twice (once to focus, once to hit the control).
 #[cfg(target_os = "macos")]
 unsafe fn swizzle_accepts_first_mouse(ns_window: &objc2::rc::Retained<objc2::runtime::AnyObject>) {
-    use objc2::runtime::{AnyClass, Bool, Sel};
+    use objc2::runtime::{AnyClass, Sel};
 
-    // Explicitly disable mouse-event pass-through on the window itself.
     let _: () = objc2::msg_send![&**ns_window, setIgnoresMouseEvents: false];
 
     let sel = Sel::register(c"acceptsFirstMouse:");
+
+    for class_name in [c"WKWebView", c"WKScrollView", c"WKContentView", c"WKFlippedView"] {
+        if let Some(cls) = AnyClass::get(class_name) {
+            install_yes_accepts_first_mouse(cls, sel);
+        }
+    }
+
+    let content_view: *mut objc2::runtime::AnyObject =
+        objc2::msg_send![&**ns_window, contentView];
+    if !content_view.is_null() {
+        swizzle_view_tree(&*content_view, sel);
+    }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn install_yes_accepts_first_mouse(cls: &objc2::runtime::AnyClass, sel: objc2::runtime::Sel) {
+    use objc2::runtime::{Bool, Sel};
 
     extern "C" fn yes_accepts_first_mouse(
         _this: &objc2::runtime::AnyObject,
@@ -232,32 +258,39 @@ unsafe fn swizzle_accepts_first_mouse(ns_window: &objc2::rc::Retained<objc2::run
         Bool::YES
     }
 
-    // Target WKWebView and its internal event-handling views by class name.
-    // This approach works even before the webview has loaded its content, so it
-    // is safe to call at setup time in both dev and production builds.
-    let class_names: &[&std::ffi::CStr] = &[
-        c"WKWebView",
-        c"WKScrollView",
-        c"WKContentView",
-        c"WKFlippedView",
-    ];
+    let added = class_addMethod(
+        cls as *const _ as *mut _,
+        sel,
+        yes_accepts_first_mouse as *const std::ffi::c_void,
+        "B@:@\0".as_ptr() as *const i8,
+    );
+    if !added {
+        class_replaceMethod(
+            cls as *const _ as *mut _,
+            sel,
+            yes_accepts_first_mouse as *const std::ffi::c_void,
+            "B@:@\0".as_ptr() as *const i8,
+        );
+    }
+}
 
-    for class_name in class_names {
-        if let Some(cls) = AnyClass::get(class_name) {
-            let added = class_addMethod(
-                cls as *const _ as *mut _,
-                sel,
-                yes_accepts_first_mouse as *const std::ffi::c_void,
-                "B@:@\0".as_ptr() as *const i8,
-            );
-            if !added {
-                class_replaceMethod(
-                    cls as *const _ as *mut _,
-                    sel,
-                    yes_accepts_first_mouse as *const std::ffi::c_void,
-                    "B@:@\0".as_ptr() as *const i8,
-                );
-            }
+#[cfg(target_os = "macos")]
+unsafe fn swizzle_view_tree(view: &objc2::runtime::AnyObject, sel: objc2::runtime::Sel) {
+    let cls_ptr: *const objc2::runtime::AnyClass = objc2::msg_send![view, class];
+    if !cls_ptr.is_null() {
+        install_yes_accepts_first_mouse(&*cls_ptr, sel);
+    }
+
+    let subviews: *mut objc2::runtime::AnyObject = objc2::msg_send![view, subviews];
+    if subviews.is_null() {
+        return;
+    }
+    let count: usize = objc2::msg_send![subviews, count];
+    for i in 0..count {
+        let subview: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![subviews, objectAtIndex: i];
+        if !subview.is_null() {
+            swizzle_view_tree(&*subview, sel);
         }
     }
 }

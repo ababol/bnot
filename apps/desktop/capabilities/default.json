@@ -9,6 +9,7 @@
     "shell:allow-kill",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
-    "deep-link:default"
+    "deep-link:default",
+    "autostart:default"
   ]
 }

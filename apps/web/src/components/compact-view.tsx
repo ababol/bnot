@@ -38,15 +38,27 @@ export default function CompactView({ notchWidth }: Props) {
     ? sessionStatusDot(heroSession.status, heroIsWorking, heroSession.sessionMode)
     : undefined;
 
-  // Bounce to "alert" width when landing on compact with pending approval
+  // Reconcile if sessions change while we're in a collapsed state: widen to
+  // alert when something needs attention, or shrink back once it's handled.
   useEffect(() => {
     if (state.panelState === "compact" && hasApproval) {
       setPanelState(dispatch, "alert");
+    } else if (state.panelState === "alert" && !hasApproval) {
+      setPanelState(dispatch, "compact");
     }
   }, [state.panelState, hasApproval, dispatch]);
 
   const hoverTimer = useRef<number | null>(null);
-  const openOverview = () => setPanelState(dispatch, "overview");
+  const openOverview = () => {
+    const pendingApproval = Object.values(sessions).some(
+      (s) => s.status === "waitingApproval",
+    );
+    const pendingQuestion = Object.values(sessions).some(
+      (s) => s.status === "waitingAnswer",
+    );
+    const target = pendingApproval ? "approval" : pendingQuestion ? "ask" : "overview";
+    setPanelState(dispatch, target);
+  };
   const handleEnter = () => {
     if (hoverTimer.current !== null) return;
     hoverTimer.current = window.setTimeout(() => {
@@ -62,11 +74,19 @@ export default function CompactView({ notchWidth }: Props) {
   };
 
   // Native cursor-tracking from Rust: fires even when window is not focused.
+  // Require the cursor to leave the trigger zone at least once after mount before
+  // honoring a hover-to-open — otherwise closing the overview with the cursor still
+  // parked on the notch instantly re-opens it.
   useEffect(() => {
+    let sawExit = false;
     let unlisten: (() => void) | null = null;
     listen<{ trigger: boolean; zone: boolean }>("notch-hover", (event) => {
-      if (event.payload.trigger) handleEnter();
-      else handleLeave();
+      if (!event.payload.trigger) {
+        sawExit = true;
+        handleLeave();
+      } else if (sawExit) {
+        handleEnter();
+      }
     }).then((u) => {
       unlisten = u;
     });
@@ -78,8 +98,6 @@ export default function CompactView({ notchWidth }: Props) {
 
   return (
     <div
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
       onClick={openOverview}
       className="flex h-full w-full cursor-pointer items-center rounded-b-[10px] bg-black"
     >

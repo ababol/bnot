@@ -77,6 +77,15 @@ export class SessionManager {
           if (p.taskName) this.sessions[sessionId].taskName = p.taskName;
           if (p.terminalApp) this.sessions[sessionId].terminalApp = p.terminalApp;
           if (p.terminalPid) this.sessions[sessionId].terminalPid = p.terminalPid;
+          // Correct the "unknown" placeholder left by ensureSession() when a hook
+          // event arrived before any sessionStart (e.g., Notify/Stop).
+          if (
+            p.workingDirectory &&
+            p.workingDirectory !== "unknown" &&
+            this.sessions[sessionId].workingDirectory === "unknown"
+          ) {
+            this.sessions[sessionId].workingDirectory = p.workingDirectory;
+          }
         }
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         if (!this.heroSessionId) this.heroSessionId = sessionId;
@@ -227,9 +236,11 @@ export class SessionManager {
   }
 
   /**
-   * Inject /color into a Claude Code session via AppleScript keystroke injection.
-   * Uses TTY marker to focus the exact Ghostty tab, injects the command,
-   * then returns focus to the previous app.
+   * Inject `/color <color>` into a Claude Code session via AppleScript keystroke
+   * injection. Claude processes the slash command and writes its own
+   * `agent-color` entry to the session JSONL — we never touch the JSONL.
+   * Uses a TTY OSC marker to focus the exact Ghostty tab, injects the command,
+   * then returns focus to the previous app. One-shot per session.
    */
   tryInjectColor(session: AgentSession) {
     if (this.coloredSessions.has(session.id)) return;
@@ -246,11 +257,10 @@ export class SessionManager {
     this.coloredSessions.add(session.id);
 
     try {
-      // Write OSC title marker to identify the right tab
       const { writeFile } = await import("fs/promises");
       const marker = `buddy-color-${Math.random().toString(36).slice(2, 6)}`;
       await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
-      await new Promise((r) => setTimeout(r, 150));
+      await new Promise((r) => setTimeout(r, 60));
 
       const script = `
 tell application "System Events"
@@ -262,12 +272,13 @@ tell application "Ghostty"
     focus item 1 of matches
   end if
 end tell
-delay 0.15
+delay 0.05
 tell application "System Events"
   keystroke "/color ${color}"
-  keystroke return
+  delay 0.04
+  key code 36
 end tell
-delay 0.2
+delay 0.08
 tell application frontApp
   activate
 end tell`;

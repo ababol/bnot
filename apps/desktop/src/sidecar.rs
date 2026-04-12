@@ -157,14 +157,17 @@ fn handle_tauri_command(data: &serde_json::Value) {
     }
 }
 
-/// Kill any leftover sidecar processes from previous runs.
-/// Uses both the PID file and a process scan to catch orphans.
+/// Kill any leftover sidecar and bridge processes from previous runs.
+/// Uses the PID file for the sidecar and a process scan to catch orphans.
+/// Also kills any running buddy-bridge processes — at this point a new sidecar
+/// hasn't started yet, so any live bridge is talking to the old (dead) sidecar
+/// and will just sit in its approval timeout.
 fn kill_stale_sidecar() {
     let home = std::env::var("HOME").unwrap_or_default();
     let pid_path = format!("{home}/.buddy-notch/buddy.pid");
     let mut killed = false;
 
-    // 1. Kill the process from the PID file
+    // 1. Kill the sidecar recorded in the PID file
     if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
         if let Ok(pid) = pid_str.trim().parse::<i32>() {
             let alive = Command::new("kill")
@@ -181,7 +184,9 @@ fn kill_stale_sidecar() {
         let _ = std::fs::remove_file(&pid_path);
     }
 
-    // 2. Scan for any orphaned sidecar processes (ppid=1, running "node index.mjs")
+    // 2. Scan for orphaned sidecar processes and any running buddy-bridge.
+    // Sidecar runs as `node … index.mjs` (release) or `node … src/index.ts` /
+    // `tsx … src/index.ts` (dev). Bridge runs as `…/buddy-bridge <subcommand>`.
     if let Ok(output) = Command::new("/bin/ps")
         .args(["-eo", "pid,ppid,args"])
         .output()
@@ -195,9 +200,18 @@ fn kill_stale_sidecar() {
             let Ok(pid) = cols[0].parse::<i32>() else { continue };
             let ppid = cols[1].trim();
             let args = cols[2];
-            // Match orphaned (ppid=1) node processes running our sidecar
-            if ppid == "1" && args.contains("node") && args.contains("index.mjs") {
+
+            let is_orphan_sidecar = ppid == "1"
+                && (args.contains("index.mjs")
+                    || (args.contains("src/index.ts") && args.contains("sidecar")));
+            let is_bridge = args.contains("buddy-bridge");
+
+            if is_orphan_sidecar {
                 eprintln!("[sidecar] killing orphaned sidecar (pid {pid})");
+                let _ = Command::new("kill").args([&pid.to_string()]).output();
+                killed = true;
+            } else if is_bridge {
+                eprintln!("[sidecar] killing stale bridge (pid {pid})");
                 let _ = Command::new("kill").args([&pid.to_string()]).output();
                 killed = true;
             }

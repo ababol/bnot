@@ -20,6 +20,7 @@ const SIZE: Record<
 export default function PixelBuddy({ color, isActive, traits, size = "sm" }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [frame, setFrame] = useState(0);
+  const [isBlinking, setIsBlinking] = useState(false);
   const { canvasW, canvasH, displayW, displayH } = SIZE[size];
 
   useEffect(() => {
@@ -27,6 +28,29 @@ export default function PixelBuddy({ color, isActive, traits, size = "sm" }: Pro
     const id = setInterval(() => setFrame((f) => f + 1), 500);
     return () => clearInterval(id);
   }, [isActive]);
+
+  // Random blink — independent of isActive, fires every ~2.5-7s for ~130ms.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+    const scheduleNext = () => {
+      const delay = 2500 + Math.random() * 4500;
+      timer = window.setTimeout(() => {
+        if (cancelled) return;
+        setIsBlinking(true);
+        timer = window.setTimeout(() => {
+          if (cancelled) return;
+          setIsBlinking(false);
+          scheduleNext();
+        }, 130);
+      }, delay);
+    };
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -46,7 +70,7 @@ export default function PixelBuddy({ color, isActive, traits, size = "sm" }: Pro
     const main = MAIN_COLORS[color];
     const bright = BRIGHT_COLORS[color];
     const dark = "black";
-    const blinking = isActive && frame % 20 === 0;
+    const blinking = isBlinking;
 
     const fill = (x: number, y: number, c: string) => {
       ctx.fillStyle = c;
@@ -109,7 +133,7 @@ export default function PixelBuddy({ color, isActive, traits, size = "sm" }: Pro
     fill(2, 5, main);
     fill(5, 5, main);
     fill(6, 5, main);
-  }, [frame, color, isActive, traits, canvasW, canvasH]);
+  }, [frame, color, isActive, isBlinking, traits, canvasW, canvasH]);
 
   const bobY = isActive ? (frame % 6 < 3 ? -0.5 : 0.5) : 0;
 

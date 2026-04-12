@@ -10,7 +10,7 @@ function AppInner() {
   const { state, dispatch } = useSession();
 
   // Listen for sidecar events + auto-collapse on blur
-  useTauriEvents(dispatch, state.panelState);
+  useTauriEvents(dispatch, state.panelState, state.sessions);
 
   useEffect(() => {
     invoke<NotchGeometry | null>("get_notch_geometry").then((g) => {

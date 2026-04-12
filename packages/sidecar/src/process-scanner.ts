@@ -7,6 +7,7 @@ const exec = promisify(execFile);
 import type { SessionMode } from "./types.js";
 
 const SCAN_INTERVAL_MS = 2000;
+const LIVENESS_INTERVAL_MS = 500;
 const CPU_ACTIVE_THRESHOLD = 2.0;
 const COMPLETION_DELAY_MS = 5000;
 
@@ -26,6 +27,7 @@ interface ProcessInfo {
 
 export class ProcessScanner {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private livenessTimer: ReturnType<typeof setInterval> | null = null;
   private sm: SessionManager;
   private pendingDeletions = new Set<string>();
   private firstScanDone = false;
@@ -37,10 +39,28 @@ export class ProcessScanner {
   start() {
     this.scan();
     this.timer = setInterval(() => this.scan(), SCAN_INTERVAL_MS);
+    this.livenessTimer = setInterval(() => this.checkLiveness(), LIVENESS_INTERVAL_MS);
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
+    if (this.livenessTimer) clearInterval(this.livenessTimer);
+  }
+
+  /** Cheap poll: if any tracked Claude pid has vanished (e.g. user closed
+   *  the Ghostty tab/pane), kick off a full scan immediately so the UI
+   *  reflects the death without waiting for the next SCAN_INTERVAL tick. */
+  private checkLiveness() {
+    for (const s of Object.values(this.sm.sessions)) {
+      const pid = s.processPid;
+      if (!pid) continue;
+      try {
+        process.kill(pid, 0);
+      } catch {
+        void this.scan();
+        return;
+      }
+    }
   }
 
   private async scan() {
@@ -114,65 +134,54 @@ export class ProcessScanner {
       }
     }
 
-    // Dedup by cwd: only merge a proc- session with a non-proc (hook-based) session.
-    // Never merge two proc- sessions — they're genuinely separate Claude instances.
-    const seenCwds: Record<string, string> = {};
-    const sortedIds = Object.keys(this.sm.sessions).sort();
-
-    for (const id of sortedIds) {
-      const session = this.sm.sessions[id];
-      if (!session) continue;
-      const cwd = session.workingDirectory;
-      const existingId = seenCwds[cwd];
-
-      if (existingId) {
-        const existingIsProc = existingId.startsWith("proc-");
-        const newIsProc = id.startsWith("proc-");
-
-        // Only merge a proc- session into a non-proc (hook-based) session.
-        // Never merge two of the same kind — they're separate Claude instances.
-        if (existingIsProc === newIsProc) {
-          continue;
-        }
-
-        // Prefer hook-based session over proc- session
-        const keepId = existingIsProc && !newIsProc ? id : existingId;
-        const removeId = keepId === existingId ? id : existingId;
-
-        // Copy process info from removed to kept
-        const removed = this.sm.sessions[removeId];
-        if (removed) {
-          const kept = this.sm.sessions[keepId];
-          if (removed.tty) kept.tty = removed.tty;
-          if (removed.processPid) kept.processPid = removed.processPid;
-          if (removed.cpuPercent) kept.cpuPercent = removed.cpuPercent;
-          if (removed.terminalApp) kept.terminalApp = removed.terminalApp;
-        }
-
-        delete this.sm.sessions[removeId];
-        seenCwds[cwd] = keepId;
-      } else {
-        seenCwds[cwd] = id;
-      }
+    // Dedup by Claude pid, not cwd — two Claudes in the same folder must stay
+    // separate. A hook session stores Claude's pid in `terminalPid` (bridge's
+    // parent == the Claude process that spawned the hook). A proc- session's
+    // `processPid` is the same Claude pid. Match on that identity.
+    const hookByClaudePid: Record<number, string> = {};
+    for (const [id, s] of Object.entries(this.sm.sessions)) {
+      if (id.startsWith("proc-")) continue;
+      if (s.terminalPid != null) hookByClaudePid[s.terminalPid] = id;
     }
 
-    // Push tty/pid from proc sessions to matching non-proc sessions
+    for (const id of Object.keys(this.sm.sessions)) {
+      if (!id.startsWith("proc-")) continue;
+      const proc = this.sm.sessions[id];
+      if (!proc?.processPid) continue;
+      const hookId = hookByClaudePid[proc.processPid];
+      if (!hookId || hookId === id) continue;
+
+      const kept = this.sm.sessions[hookId];
+      if (proc.tty) kept.tty = proc.tty;
+      if (proc.processPid) kept.processPid = proc.processPid;
+      if (proc.cpuPercent) kept.cpuPercent = proc.cpuPercent;
+      if (proc.terminalApp) kept.terminalApp = proc.terminalApp;
+      if (proc.gitBranch) kept.gitBranch = proc.gitBranch;
+      if (proc.gitWorktree) kept.gitWorktree = proc.gitWorktree;
+      if (proc.gitRepoName) kept.gitRepoName = proc.gitRepoName;
+      if (proc.sessionMode && proc.sessionMode !== "normal") {
+        kept.sessionMode = proc.sessionMode;
+      }
+      delete this.sm.sessions[id];
+    }
+
+    // Push live tty/pid/cpu into the matching hook session (by Claude pid)
+    // and trigger /color injection once a tty appears (skip first scan so
+    // sessions that already existed before launch aren't retyped).
     for (const info of activePids) {
-      const match = Object.entries(this.sm.sessions).find(
-        ([k, v]) => !k.startsWith("proc-") && v.workingDirectory === (info.cwd ?? ""),
-      );
-      if (match) {
-        match[1].tty = info.tty ?? undefined;
-        match[1].processPid = info.pid;
-        match[1].cpuPercent = info.cpuPercent;
-        // Inject color for hook-based sessions once they get a TTY
-        if (this.firstScanDone && match[1].tty && !this.sm.coloredSessions.has(match[0])) {
-          this.sm.tryInjectColor(match[1]);
-        }
+      const hookId = hookByClaudePid[info.pid];
+      if (!hookId) continue;
+      const hookSession = this.sm.sessions[hookId];
+      if (!hookSession) continue;
+      hookSession.tty = info.tty ?? undefined;
+      hookSession.processPid = info.pid;
+      hookSession.cpuPercent = info.cpuPercent;
+      if (this.firstScanDone && hookSession.tty && !this.sm.coloredSessions.has(hookId)) {
+        this.sm.tryInjectColor(hookSession);
       }
     }
 
-    // Also check proc- sessions that just got created with a TTY (skip first scan)
+    // Also trigger injection for fresh proc- sessions that have a tty.
     if (this.firstScanDone) {
       for (const info of activePids) {
         const sessionId = `proc-${info.pid}`;
@@ -183,7 +192,8 @@ export class ProcessScanner {
       }
     }
 
-    // Mark all existing sessions as already colored on first scan
+    // On the first scan, treat all pre-existing sessions as already colored
+    // so we don't re-inject /color for sessions that were alive before launch.
     if (!this.firstScanDone) {
       for (const id of Object.keys(this.sm.sessions)) {
         this.sm.coloredSessions.add(id);
