@@ -18,6 +18,9 @@ apps/desktop/gen/
 # Sidecar
 packages/sidecar/dist/
 
+# Extension
+packages/extension/*.zip
+
 # LLMs
 .claude/worktrees
 .claude/settings.local.json
