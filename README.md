@@ -4,6 +4,8 @@ A macOS notch-panel app that monitors Claude Code sessions in real time. Lives i
 
 Inspired by [vibeisland.app](https://vibeisland.app/).
 
+> **Note:** Bnot is optimized for [Claude Code](https://claude.com/claude-code) running in [Ghostty](https://ghostty.org/). iTerm and Warp work but have reduced fidelity for tab/pane jumping.
+
 ## Features
 
 - **Auto-detects all running Claude Code sessions** via process scanning and hook integration
