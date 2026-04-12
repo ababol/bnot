@@ -3,6 +3,7 @@
 export type MessageType =
   | "preToolUse"
   | "postToolUse"
+  | "permissionRequest"
   | "notification"
   | "sessionStart"
   | "sessionEnd"
@@ -20,6 +21,7 @@ export interface SocketMessage {
 export type MessagePayload = {
   preToolUse?: PreToolUsePayload;
   postToolUse?: PostToolUsePayload;
+  permissionRequest?: PermissionRequestPayload;
   notification?: NotificationPayload;
   sessionStart?: SessionStartPayload;
   sessionEnd?: SessionEndPayload;
@@ -33,8 +35,17 @@ export interface PreToolUsePayload {
   input?: string;
   diffPreview?: string;
   question?: string;
+  questionHeader?: string;
   options?: string[];
-  blocking?: boolean;
+  optionDescriptions?: string[];
+}
+
+export interface PermissionRequestPayload {
+  toolName: string;
+  filePath?: string;
+  input?: string;
+  diffPreview?: string;
+  canRemember?: boolean;
 }
 
 export interface PostToolUsePayload {
@@ -65,7 +76,16 @@ export interface StopPayload {
 }
 
 export interface ApprovalResponse {
-  action: "allow" | "deny";
+  action:
+    | "allow"
+    | "allowAlways"
+    | "deny"
+    | "answer"
+    | "acceptEdits"
+    | "bypassPermissions";
+  answerLabel?: string;
+  questionText?: string;
+  feedback?: string;
 }
 
 // Session model matching Session.swift
@@ -89,11 +109,14 @@ export interface AgentSession {
     filePath?: string;
     input?: string;
     diffPreview?: string;
+    canRemember?: boolean;
     receivedAt: number;
   };
   pendingQuestion?: {
     question: string;
+    header?: string;
     options: string[];
+    optionDescriptions?: string[];
     receivedAt: number;
   };
   contextTokens: number;

@@ -59,6 +59,26 @@ end tell`;
   }
 }
 
+/** Jump to session and type the answer (option number + Enter) */
+export async function answerQuestion(session: AgentSession, optionIndex: number) {
+  await jumpToSession(session);
+  // Wait for terminal to focus, then type the answer
+  await new Promise((r) => setTimeout(r, 300));
+  const text = String(optionIndex + 1);
+  try {
+    await exec("/usr/bin/osascript", [
+      "-e",
+      `tell application "System Events" to keystroke "${text}"`,
+      "-e",
+      `delay 0.05`,
+      "-e",
+      `tell application "System Events" to keystroke return`,
+    ]);
+  } catch {
+    // Keystroke injection failed — not critical
+  }
+}
+
 export async function detectRunningTerminal(): Promise<string> {
   try {
     const { stdout } = await exec("/bin/ps", ["-eo", "comm"]);

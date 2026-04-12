@@ -10,7 +10,7 @@ interface SessionsUpdatedPayload {
   heroId: string | null;
 }
 
-const VALID_PANEL_STATES: Set<string> = new Set(["compact", "overview", "approval", "ask", "jump"]);
+const VALID_PANEL_STATES: Set<string> = new Set(["compact", "alert", "overview", "approval", "ask", "jump"]);
 
 export function useTauriEvents(dispatch: React.Dispatch<SessionAction>, panelState: string) {
   useEffect(() => {
@@ -27,6 +27,9 @@ export function useTauriEvents(dispatch: React.Dispatch<SessionAction>, panelSta
     listen<{ state: string }>("panelStateChange", (event) => {
       const raw = event.payload.state;
       if (typeof raw !== "string" || !VALID_PANEL_STATES.has(raw)) return;
+      if (raw === "alert") {
+        new Audio("/alert.mp3").play().catch(() => {});
+      }
       setPanelState(dispatch, raw as PanelState);
     }).then((u) => unlisten.push(u));
 
@@ -43,6 +46,7 @@ export function useTauriEvents(dispatch: React.Dispatch<SessionAction>, panelSta
   useEffect(() => {
     if (
       panelState === "compact" ||
+      panelState === "alert" ||
       panelState === "jump" ||
       panelState === "approval" ||
       panelState === "ask"

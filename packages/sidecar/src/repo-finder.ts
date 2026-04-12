@@ -24,8 +24,6 @@ export class RepoFinder {
   async findRepo(owner: string, repo: string): Promise<string | null> {
     await this.ensureCache();
 
-    const key = `${owner}/${repo}`.toLowerCase();
-
     // Direct match by remote owner/repo
     for (const entry of this.cache.values()) {
       if (

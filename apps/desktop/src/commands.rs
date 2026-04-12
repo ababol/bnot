@@ -55,6 +55,15 @@ pub fn jump_to_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
 }
 
 #[command]
+pub fn answer_question<R: Runtime>(app: AppHandle<R>, session_id: String, option_index: u32) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request(
+        "answerQuestion",
+        serde_json::json!({ "sessionId": session_id, "optionIndex": option_index }),
+    );
+}
+
+#[command]
 pub fn approve_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
     let sidecar = app.state::<crate::sidecar::SidecarManager>();
     sidecar.send_request(
@@ -64,10 +73,38 @@ pub fn approve_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
 }
 
 #[command]
-pub fn deny_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
+pub fn deny_session<R: Runtime>(app: AppHandle<R>, session_id: String, feedback: Option<String>) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    let mut params = serde_json::json!({ "sessionId": session_id });
+    if let Some(fb) = feedback {
+        params["feedback"] = serde_json::Value::String(fb);
+    }
+    sidecar.send_request("denySession", params);
+}
+
+#[command]
+pub fn accept_edits_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
     let sidecar = app.state::<crate::sidecar::SidecarManager>();
     sidecar.send_request(
-        "denySession",
+        "acceptEditsSession",
+        serde_json::json!({ "sessionId": session_id }),
+    );
+}
+
+#[command]
+pub fn bypass_permissions_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request(
+        "bypassPermissionsSession",
+        serde_json::json!({ "sessionId": session_id }),
+    );
+}
+
+#[command]
+pub fn approve_session_always<R: Runtime>(app: AppHandle<R>, session_id: String) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request(
+        "approveSessionAlways",
         serde_json::json!({ "sessionId": session_id }),
     );
 }

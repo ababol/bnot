@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { BuddyColor, BuddyTraits, StatusDot } from "../lib/colors";
-import { BUDDY_COLORS_RGB, STATUS_DOT_COLORS, lighten } from "../lib/colors";
+import { BRIGHT_COLORS, MAIN_COLORS, STATUS_DOT_COLORS } from "../lib/colors";
 
 interface Props {
   color: BuddyColor;
@@ -34,8 +34,8 @@ export default function PixelBuddy({ color, isActive, traits, dot }: Props) {
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, w, h);
 
-    const main = BUDDY_COLORS_RGB[color];
-    const bright = lighten(main);
+    const main = MAIN_COLORS[color];
+    const bright = BRIGHT_COLORS[color];
     const dark = "black";
     const blinking = isActive && frame % 20 === 0;
 
@@ -114,6 +114,7 @@ export default function PixelBuddy({ color, isActive, traits, dot }: Props) {
       fill(6, 7, dotColor);
       fill(7, 7, dotColor);
     }
+
   }, [frame, color, isActive, traits, dot]);
 
   const bobY = isActive ? (frame % 6 < 3 ? -0.5 : 0.5) : 0;

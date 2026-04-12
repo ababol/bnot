@@ -16,7 +16,6 @@ export default function AskView({ notchHeight }: Props) {
   const close = () => setPanelState(dispatch, "compact");
 
   if (!session || !question) {
-    close();
     return null;
   }
 

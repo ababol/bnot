@@ -5,42 +5,69 @@ interface Props {
 export default function DiffView({ diff }: Props) {
   const lines = diff.split("\n");
 
+  // Parse @@ header for starting line number
+  let lineNum = 1;
+  const headerMatch = lines[0]?.match(/@@ -(\d+)/);
+  if (headerMatch) {
+    lineNum = parseInt(headerMatch[1], 10);
+  }
+
+  // Skip @@ header line for rendering
+  const displayLines = headerMatch ? lines.slice(1) : lines;
+
   return (
-    <div className="py-1.5 font-mono">
-      {lines.map((line, i) => {
+    <div className="py-1 font-mono">
+      {displayLines.map((line, i) => {
         const isAdd = line.startsWith("+") && !line.startsWith("+++");
         const isRemove = line.startsWith("-") && !line.startsWith("---");
-        const isHeader = line.startsWith("@@");
+        const isContext = line.startsWith(" ");
 
-        const prefix = isAdd ? "+" : isRemove ? "-" : " ";
-        const content = isAdd || isRemove ? line.slice(1) : line;
+        const bgClass = isAdd
+          ? "bg-buddy-green/15"
+          : isRemove
+            ? "bg-buddy-red/15"
+            : "";
 
-        const colorClass = isAdd
+        const textClass = isAdd
           ? "text-buddy-green"
           : isRemove
             ? "text-buddy-red"
-            : isHeader
-              ? "text-buddy-cyan"
-              : "text-white/50";
+            : "text-white/60";
 
-        const bgClass = isAdd ? "bg-buddy-green/8" : isRemove ? "bg-buddy-red/8" : "";
+        const numClass = isAdd
+          ? "text-buddy-green/60"
+          : isRemove
+            ? "text-buddy-red/60"
+            : "text-white/20";
 
-        const showLineNum = !isHeader && !line.startsWith("---") && !line.startsWith("+++");
+        // Compute line number: context and added lines advance the counter,
+        // removed lines show the old line number but don't advance
+        const currentNum = lineNum;
+        if (isContext || isAdd) lineNum++;
+        if (isRemove) lineNum++;
 
         return (
-          <div key={i} className={`flex items-baseline px-1.5 py-px ${bgClass}`}>
-            <span className="w-7 shrink-0 pr-1.5 text-right text-[9px] text-white/25">
-              {showLineNum ? i + 1 : ""}
+          <div key={i} className={`flex px-2 py-px ${bgClass}`}>
+            <span className={`w-8 shrink-0 pr-2 text-right text-[11px] ${numClass}`}>
+              {currentNum}
             </span>
-            <span
-              className={`w-3 shrink-0 text-[10px] font-bold ${isAdd || isRemove ? colorClass : "text-transparent"}`}
-            >
-              {prefix}
+            <span className={`whitespace-pre-wrap break-all text-[11px] ${textClass}`}>
+              {line}
             </span>
-            <span className={`truncate text-[10px] ${colorClass}`}>{content}</span>
           </div>
         );
       })}
     </div>
   );
+}
+
+/** Count added/removed lines in a diff string */
+export function diffStats(diff: string): { added: number; removed: number } {
+  let added = 0;
+  let removed = 0;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) added++;
+    if (line.startsWith("-") && !line.startsWith("---")) removed++;
+  }
+  return { added, removed };
 }

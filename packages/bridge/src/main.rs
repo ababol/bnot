@@ -1,13 +1,25 @@
 use clap::{Parser, Subcommand};
-use serde::Serialize;
-use std::io::{Read, Write};
+use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
+use std::time::Duration;
 
 mod hook_input;
 
 use hook_input::ClaudeHookInput;
 
 const SOCKET_PATH: &str = ".buddy-notch/buddy.sock";
+const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
+
+#[derive(Deserialize)]
+struct ApprovalResponse {
+    action: String, // "allow" | "allowAlways" | "deny" | "answer" | "acceptEdits" | "bypassPermissions"
+    #[serde(rename = "answerLabel")]
+    answer_label: Option<String>,
+    #[serde(rename = "questionText")]
+    question_text: Option<String>,
+    feedback: Option<String>,
+}
 
 fn socket_path() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
@@ -27,6 +39,8 @@ enum Commands {
     PreTool,
     #[command(name = "post-tool")]
     PostTool,
+    #[command(name = "perm-request")]
+    PermRequest,
     Notify,
     Stop,
 }
@@ -34,7 +48,6 @@ enum Commands {
 fn main() {
     let cli = Cli::parse();
 
-    // Read stdin before fork (consumed by parent)
     let hook = read_hook_input();
     let session_id = hook
         .as_ref()
@@ -44,27 +57,21 @@ fn main() {
     let cwd = hook
         .as_ref()
         .and_then(|h| h.cwd.clone())
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string()
-        });
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().to_string_lossy().to_string());
 
     let session_mode = hook.as_ref().and_then(|h| {
-        h.session_type
-            .as_deref()
-            .and_then(|t| if t == "plan" { Some("plan") } else { None })
+        h.session_type.as_deref().and_then(|t| {
+            if t == "plan" { Some("plan") } else { None }
+        })
     });
 
-    // Fork to background — parent exits immediately so Claude Code is never blocked.
-    // Child handles all socket I/O then exits.
-    if !fork_to_background() {
-        return;
-    }
+    // Auto-assign color on first hook event (read by BuddyNotch immediately, by Claude Code on resume)
+    auto_assign_color(&session_id, &cwd);
 
     match cli.command {
         Commands::PreTool => {
+            // Fire-and-forget: track tool usage, never block.
+            // Permission approval is handled by the PermRequest subcommand.
             let diff = hook.as_ref().and_then(|h| {
                 let ti = h.tool_input.as_ref()?;
                 if let (Some(old), Some(new)) = (&ti.old_string, &ti.new_string) {
@@ -74,34 +81,32 @@ fn main() {
                 }
             });
 
-            let tool_name = hook
-                .as_ref()
-                .and_then(|h| h.tool_name.as_deref())
-                .unwrap_or("Tool");
-            let file_path =
-                hook.as_ref()
-                    .and_then(|h| h.tool_input.as_ref()?.file_path.as_deref());
-            let command = hook
-                .as_ref()
-                .and_then(|h| h.tool_input.as_ref()?.command.as_deref());
-            let (question_owned, options_owned) = hook
+            let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
+            let file_path = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.file_path.as_deref());
+            let command = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.command.as_deref());
+            let (question_owned, header_owned, options_owned, descriptions_owned) = hook
                 .as_ref()
                 .and_then(|h| {
                     let ti = h.tool_input.as_ref()?;
                     if ti.question.is_some() {
-                        return Some((ti.question.clone(), ti.options.clone()));
+                        return Some((ti.question.clone(), None::<String>, ti.options.clone(), None::<Vec<String>>));
                     }
                     let qi = ti.questions.as_ref()?.first()?;
                     let q = qi.question.clone();
-                    let opts = qi
-                        .options
-                        .as_ref()
-                        .map(|os| os.iter().filter_map(|o| o.label.clone()).collect());
-                    Some((q, opts))
+                    let hdr = qi.header.clone();
+                    let opts = qi.options.as_ref().map(|os| {
+                        os.iter().filter_map(|o| o.label.clone()).collect()
+                    });
+                    let descs = qi.options.as_ref().map(|os| {
+                        os.iter().map(|o| o.description.clone().unwrap_or_default()).collect()
+                    });
+                    Some((q, hdr, opts, descs))
                 })
-                .unwrap_or((None, None));
+                .unwrap_or((None, None, None, None));
+            let question = question_owned.as_deref();
+            let question_header = header_owned.as_deref();
 
-            let session_start = SocketMessage {
+            let _ = send_message(&SocketMessage {
                 r#type: "sessionStart",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -114,9 +119,9 @@ fn main() {
                     },
                 },
                 session_mode,
-            };
+            });
 
-            let pre_tool = SocketMessage {
+            let _ = send_message(&SocketMessage {
                 r#type: "preToolUse",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -126,17 +131,43 @@ fn main() {
                         file_path,
                         input: command,
                         diff_preview: diff.as_deref(),
-                        question: question_owned.as_deref(),
+                        question,
+                        question_header,
                         options: options_owned.as_deref(),
+                        option_descriptions: descriptions_owned.as_deref(),
                     },
                 },
                 session_mode,
-            };
-
-            let _ = send_messages(&[&session_start, &pre_tool]);
+            });
         }
 
-        Commands::PostTool => {
+        Commands::PermRequest => {
+            // Blocking path: show approval UI in BuddyNotch, wait for user decision.
+            // Responds with PermissionRequest hook output format.
+            let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
+
+            // Skip safe tools (except AskUserQuestion which we answer via the socket)
+            const SAFE_TOOLS: &[&str] = &["TaskCreate", "TaskUpdate", "TodoRead", "TodoWrite"];
+            if SAFE_TOOLS.contains(&tool_name) {
+                return;
+            }
+            let file_path = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.file_path.as_deref());
+            let command = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.command.as_deref());
+            let diff = hook.as_ref().and_then(|h| {
+                let ti = h.tool_input.as_ref()?;
+                // ExitPlanMode: use plan content as preview
+                if let Some(plan) = &ti.plan {
+                    return Some(plan.clone());
+                }
+                if let (Some(old), Some(new)) = (&ti.old_string, &ti.new_string) {
+                    build_rich_diff(ti.file_path.as_deref(), old, new)
+                } else {
+                    ti.diff.clone()
+                }
+            });
+            let permission_suggestions = hook.as_ref().and_then(|h| h.permission_suggestions.clone());
+            let can_remember = permission_suggestions.is_some();
+
             let session_start = SocketMessage {
                 r#type: "sessionStart",
                 session_id: &session_id,
@@ -152,10 +183,105 @@ fn main() {
                 session_mode,
             };
 
-            let tool_name = hook
-                .as_ref()
-                .and_then(|h| h.tool_name.as_deref())
-                .unwrap_or("Tool");
+            let perm_request = SocketMessage {
+                r#type: "permissionRequest",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::PermissionRequest {
+                    permission_request: PermissionRequestPayload {
+                        tool_name,
+                        file_path,
+                        input: command,
+                        diff_preview: diff.as_deref(),
+                        can_remember,
+                    },
+                },
+                session_mode,
+            };
+
+            if let Some(resp) = send_and_wait(&session_start, &perm_request) {
+                let output = if resp.action == "deny" {
+                    let msg = resp.feedback.clone().unwrap_or_else(|| "Denied via BuddyNotch".to_string());
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": {
+                                "behavior": "deny",
+                                "message": msg
+                            }
+                        }
+                    })
+                } else if resp.action == "acceptEdits" || resp.action == "bypassPermissions" {
+                    let mode = if resp.action == "acceptEdits" { "acceptEdits" } else { "bypassPermissions" };
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": {
+                                "behavior": "allow",
+                                "updatedPermissions": [
+                                    { "type": "setMode", "mode": mode, "destination": "session" }
+                                ]
+                            }
+                        }
+                    })
+                } else if resp.action == "allowAlways" {
+                    let mut decision = serde_json::json!({ "behavior": "allow" });
+                    if let Some(ref suggestions) = permission_suggestions {
+                        decision["updatedPermissions"] = suggestions.clone();
+                    }
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": decision
+                        }
+                    })
+                } else if resp.action == "answer" {
+                    // AskUserQuestion: return updatedInput with pre-filled answer
+                    let mut answers = serde_json::Map::new();
+                    if let (Some(q), Some(a)) = (&resp.question_text, &resp.answer_label) {
+                        answers.insert(q.clone(), serde_json::Value::String(a.clone()));
+                    }
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": {
+                                "behavior": "allow",
+                                "updatedInput": { "answers": answers }
+                            }
+                        }
+                    })
+                } else {
+                    // "allow"
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": { "behavior": "allow" }
+                        }
+                    })
+                };
+                println!("{}", output);
+            }
+            // If send_and_wait returns None (timeout/error), exit 0 with no output
+            // so Claude Code falls back to its own permission prompt
+        }
+
+        Commands::PostTool => {
+            let _ = send_message(&SocketMessage {
+                r#type: "sessionStart",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::SessionStart {
+                    session_start: SessionStartPayload {
+                        task_name: None,
+                        working_directory: &cwd,
+                        terminal_app: detect_terminal(),
+                        terminal_pid: get_parent_pid(),
+                    },
+                },
+                session_mode,
+            });
+
+            let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
             let file_path = hook.as_ref().and_then(|h| {
                 h.tool_input
                     .as_ref()
@@ -163,7 +289,7 @@ fn main() {
                     .or_else(|| h.tool_response.as_ref()?.file_path.as_deref())
             });
 
-            let post_tool = SocketMessage {
+            let _ = send_message(&SocketMessage {
                 r#type: "postToolUse",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -175,16 +301,11 @@ fn main() {
                     },
                 },
                 session_mode,
-            };
-
-            let _ = send_messages(&[&session_start, &post_tool]);
+            });
         }
 
         Commands::Notify => {
-            let title = hook
-                .as_ref()
-                .and_then(|h| h.tool_name.as_deref())
-                .unwrap_or("Notification");
+            let title = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Notification");
 
             let _ = send_message(&SocketMessage {
                 r#type: "notification",
@@ -217,6 +338,35 @@ fn main() {
     }
 }
 
+/// Build a unified diff with real line numbers by reading the file and using `similar`.
+/// Falls back to simple `- old\n+ new` if the file can't be read.
+fn build_rich_diff(file_path: Option<&str>, old_str: &str, new_str: &str) -> Option<String> {
+    let path = file_path?;
+    let content = std::fs::read_to_string(path).ok()?;
+
+    // Build the full new file content by replacing old_string with new_string
+    let new_content = content.replacen(old_str, new_str, 1);
+    if new_content == content {
+        // old_string not found in file, fall back
+        return None;
+    }
+
+    let diff = similar::TextDiff::from_lines(&content, &new_content);
+    let unified = diff.unified_diff()
+        .context_radius(2)
+        .header("a", "b")
+        .to_string();
+
+    // Strip the --- a / +++ b header lines, keep only @@ hunks and content
+    let result: String = unified
+        .lines()
+        .filter(|l| !l.starts_with("---") && !l.starts_with("+++"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if result.is_empty() { None } else { Some(result) }
+}
+
 fn read_hook_input() -> Option<ClaudeHookInput> {
     let mut buf = String::new();
     std::io::stdin().read_to_string(&mut buf).ok()?;
@@ -245,14 +395,11 @@ fn detect_terminal() -> Option<&'static str> {
 
 fn get_parent_pid() -> Option<u32> {
     let ppid = unsafe { libc::getppid() };
-    if ppid > 1 {
-        Some(ppid as u32)
-    } else {
-        None
-    }
+    if ppid > 1 { Some(ppid as u32) } else { None }
 }
 
 fn now_iso() -> String {
+    // Use libc to get a proper timestamp
     unsafe {
         let mut t: libc::time_t = 0;
         libc::time(&mut t);
@@ -271,32 +418,6 @@ fn now_iso() -> String {
     }
 }
 
-/// Fork to background so Claude Code is never blocked.
-/// Returns true if caller should continue (child or fork failed).
-/// Returns false if caller should exit immediately (parent).
-fn fork_to_background() -> bool {
-    unsafe {
-        match libc::fork() {
-            -1 => true, // fork failed — fall through to synchronous path
-            0 => {
-                // Child: redirect fds to /dev/null so we don't interfere
-                libc::close(0);
-                let devnull = libc::open(b"/dev/null\0".as_ptr() as *const _, libc::O_RDWR);
-                if devnull >= 0 {
-                    libc::dup2(devnull, 1);
-                    libc::dup2(devnull, 2);
-                    if devnull > 2 {
-                        libc::close(devnull);
-                    }
-                }
-                libc::setsid();
-                true
-            }
-            _ => false, // parent: exit immediately
-        }
-    }
-}
-
 fn send_message(msg: &SocketMessage) -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = UnixStream::connect(socket_path())?;
     let json = serde_json::to_string(msg)?;
@@ -306,16 +427,81 @@ fn send_message(msg: &SocketMessage) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Send multiple messages on a single socket connection.
-fn send_messages(msgs: &[&SocketMessage]) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stream = UnixStream::connect(socket_path())?;
-    for msg in msgs {
-        let json = serde_json::to_string(msg)?;
-        stream.write_all(json.as_bytes())?;
-        stream.write_all(b"\n")?;
+/// Send two messages on a single connection and block until a response is received.
+/// Returns None on connection failure, timeout, or parse error (graceful fallback).
+fn send_and_wait(msg1: &SocketMessage, msg2: &SocketMessage) -> Option<ApprovalResponse> {
+    let mut stream = UnixStream::connect(socket_path()).ok()?;
+    stream.set_read_timeout(Some(APPROVAL_TIMEOUT)).ok()?;
+
+    // Write both messages on the same connection
+    let json1 = serde_json::to_string(msg1).ok()?;
+    let json2 = serde_json::to_string(msg2).ok()?;
+    stream.write_all(json1.as_bytes()).ok()?;
+    stream.write_all(b"\n").ok()?;
+    stream.write_all(json2.as_bytes()).ok()?;
+    stream.write_all(b"\n").ok()?;
+    stream.flush().ok()?;
+
+    // Block reading until sidecar sends a response line
+    let reader = BufReader::new(&stream);
+    for line in reader.lines() {
+        let line = line.ok()?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        return serde_json::from_str(&line).ok();
     }
-    stream.flush()?;
-    Ok(())
+
+    None
+}
+
+// --- Auto-assign color ---
+
+const CLAUDE_COLORS: &[&str] = &["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
+
+fn djb2(s: &str) -> u32 {
+    let mut h: u32 = 5381;
+    for b in s.bytes() {
+        h = h.wrapping_mul(33).wrapping_add(b as u32);
+    }
+    h
+}
+
+fn auto_assign_color(session_id: &str, cwd: &str) {
+    let home = match std::env::var("HOME") {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    let project_key = cwd.replace(['/', '.'], "-");
+    let path = format!("{home}/.claude/projects/{project_key}/{session_id}.jsonl");
+
+    if !std::path::Path::new(&path).exists() { return; }
+
+    // Read last 4KB to check if agent-color already exists
+    let has_color = match std::fs::File::open(&path) {
+        Ok(f) => {
+            let size = f.metadata().map(|m| m.len()).unwrap_or(0);
+            let read_size = std::cmp::min(size, 4096) as usize;
+            if read_size == 0 { false } else {
+                let mut buf = vec![0u8; read_size];
+                use std::io::{Seek, SeekFrom};
+                let mut f = f;
+                let _ = f.seek(SeekFrom::End(-(read_size as i64)));
+                let _ = std::io::Read::read(&mut f, &mut buf);
+                String::from_utf8_lossy(&buf).contains("agent-color")
+            }
+        }
+        Err(_) => return,
+    };
+
+    if !has_color {
+        let color = CLAUDE_COLORS[(djb2(&format!("{cwd}{session_id}")) as usize) % CLAUDE_COLORS.len()];
+        let entry = format!(
+            "{{\"type\":\"agent-color\",\"agentColor\":\"{color}\",\"sessionId\":\"{session_id}\"}}\n"
+        );
+        let _ = std::fs::OpenOptions::new().append(true).open(&path)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
+    }
 }
 
 // Wire types — must match sidecar/src/types.ts
@@ -345,6 +531,10 @@ enum Payload<'a> {
     PostToolUse {
         #[serde(rename = "postToolUse")]
         post_tool_use: PostToolUsePayload<'a>,
+    },
+    PermissionRequest {
+        #[serde(rename = "permissionRequest")]
+        permission_request: PermissionRequestPayload<'a>,
     },
     Notification {
         notification: NotificationPayload<'a>,
@@ -380,7 +570,25 @@ struct PreToolUsePayload<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     question: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    question_header: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    option_descriptions: Option<&'a [String]>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PermissionRequestPayload<'a> {
+    tool_name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_path: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diff_preview: Option<&'a str>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    can_remember: bool,
 }
 
 #[derive(Serialize)]

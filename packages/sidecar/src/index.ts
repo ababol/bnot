@@ -8,7 +8,6 @@ import { resumeSession } from "./session-launcher.js";
 import { SessionManager } from "./session-manager.js";
 import { SocketServer } from "./socket-server.js";
 import { jumpToSession } from "./terminal-jumper.js";
-
 import { WorktreeCreator } from "./worktree-creator.js";
 
 function requireParam(params: Record<string, unknown> | undefined, key: string): string {
@@ -23,11 +22,12 @@ function resolveApproval(
   sessionManager: SessionManager,
   socketServer: SocketServer,
   sessionId: string,
-  action: "allow" | "deny",
+  action: "allow" | "allowAlways" | "deny" | "acceptEdits" | "bypassPermissions",
+  feedback?: string,
 ) {
   const clientFd = sessionManager.pendingApprovalClients[sessionId];
   if (clientFd !== undefined) {
-    socketServer.sendResponse({ action }, clientFd);
+    socketServer.sendResponse({ action, feedback }, clientFd);
     if (sessionManager.sessions[sessionId]) {
       sessionManager.sessions[sessionId].pendingApproval = undefined;
       sessionManager.sessions[sessionId].status = "active";
@@ -66,6 +66,30 @@ onRequest(async (method, params) => {
       return { success: true, sessionId };
     }
 
+    case "answerQuestion": {
+      const sessionId = requireParam(params, "sessionId");
+      const optionIndex = typeof params?.optionIndex === "number" ? params.optionIndex : 0;
+      const session = sessionManager.sessions[sessionId];
+      if (session?.pendingQuestion) {
+        const q = session.pendingQuestion;
+        const label = q.options[optionIndex] ?? q.options[0] ?? "";
+        // Send answer through the socket to the waiting bridge
+        const clientFd = sessionManager.pendingApprovalClients[sessionId];
+        if (clientFd !== undefined) {
+          socketServer.sendResponse(
+            { action: "answer", answerLabel: label, questionText: q.question } as never,
+            clientFd,
+          );
+          session.pendingQuestion = undefined;
+          session.status = "active";
+          delete sessionManager.pendingApprovalClients[sessionId];
+          emit("panelStateChange", { state: "compact" });
+          sessionManager.emitUpdate();
+        }
+      }
+      return { success: true };
+    }
+
     case "approveSession": {
       const sessionId = requireParam(params, "sessionId");
       resolveApproval(sessionManager, socketServer, sessionId, "allow");
@@ -74,7 +98,26 @@ onRequest(async (method, params) => {
 
     case "denySession": {
       const sessionId = requireParam(params, "sessionId");
-      resolveApproval(sessionManager, socketServer, sessionId, "deny");
+      const feedback = typeof params?.feedback === "string" ? params.feedback : undefined;
+      resolveApproval(sessionManager, socketServer, sessionId, "deny", feedback);
+      return { success: true };
+    }
+
+    case "acceptEditsSession": {
+      const sessionId = requireParam(params, "sessionId");
+      resolveApproval(sessionManager, socketServer, sessionId, "acceptEdits");
+      return { success: true };
+    }
+
+    case "bypassPermissionsSession": {
+      const sessionId = requireParam(params, "sessionId");
+      resolveApproval(sessionManager, socketServer, sessionId, "bypassPermissions");
+      return { success: true };
+    }
+
+    case "approveSessionAlways": {
+      const sessionId = requireParam(params, "sessionId");
+      resolveApproval(sessionManager, socketServer, sessionId, "allowAlways");
       return { success: true };
     }
 
