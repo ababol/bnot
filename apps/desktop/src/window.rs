@@ -1,5 +1,5 @@
 use crate::notch::NotchGeometry;
-use tauri::{Runtime, WebviewWindow};
+use tauri::{AppHandle, Emitter, Runtime, WebviewWindow};
 
 const COMPACT_SIDE_EXTENSION: f64 = 36.0;
 const ANIMATION_DURATION: f64 = 0.2;
@@ -27,9 +27,9 @@ pub fn expanded_frame(state: &str, geom: &NotchGeometry) -> (f64, f64, f64, f64)
             let x = geom.center_x - w / 2.0;
             return (x, 0.0, w, h);
         }
-        "overview" => (geom.notch_width + 380.0, 420.0),
-        "approval" => (geom.notch_width + 380.0, 420.0),
-        "ask" => (geom.notch_width + 380.0, 420.0),
+        "overview" => (geom.notch_width + 380.0, 300.0),
+        "approval" => (geom.notch_width + 380.0, 300.0),
+        "ask" => (geom.notch_width + 380.0, 300.0),
         _ => {
             let (x, w, h) = compact_frame(geom);
             return (x, 0.0, w, h);
@@ -92,6 +92,49 @@ pub fn animate_frame<R: Runtime>(window: &WebviewWindow<R>, x: f64, y: f64, w: f
                 objc2::msg_send![objc2::class!(NSAnimationContext), endGrouping];
         }
     }
+}
+
+/// Poll the global cursor position on a background thread and emit `notch-hover`
+/// events. Tracks two zones:
+///   - `trigger`: the compact notch frame (opens overview on enter)
+///   - `zone`: the full expanded frame (closes overview on leave)
+/// Polling natively means we don't depend on DOM mouseenter/mouseleave, which
+/// only fire reliably when the WKWebView is in the key window.
+pub fn start_hover_watcher<R: Runtime>(app: AppHandle<R>) {
+    use core_graphics::event::CGEvent;
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let in_trigger = Arc::new(AtomicBool::new(false));
+    let in_zone = Arc::new(AtomicBool::new(false));
+
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(80));
+
+        let Some(geom) = crate::notch::get_notch_geometry() else { continue };
+        let (cx, cw, ch) = compact_frame(&geom);
+        let (ex, _, ew, eh) = expanded_frame("overview", &geom);
+
+        let Ok(source) = CGEventSource::new(CGEventSourceStateID::HIDSystemState) else { continue };
+        let Ok(event) = CGEvent::new(source) else { continue };
+        let loc = event.location();
+
+        // CGEvent.location and Tauri logical coords share a top-left origin.
+        let now_trigger = loc.x >= cx && loc.x <= cx + cw && loc.y >= 0.0 && loc.y <= ch;
+        let now_zone = loc.x >= ex && loc.x <= ex + ew && loc.y >= 0.0 && loc.y <= eh;
+
+        let was_trigger = in_trigger.swap(now_trigger, Ordering::Relaxed);
+        let was_zone = in_zone.swap(now_zone, Ordering::Relaxed);
+
+        if now_trigger != was_trigger || now_zone != was_zone {
+            let _ = app.emit(
+                "notch-hover",
+                serde_json::json!({ "trigger": now_trigger, "zone": now_zone }),
+            );
+        }
+    });
 }
 
 /// Make the window key so it can receive/lose focus events.

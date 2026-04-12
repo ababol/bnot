@@ -2,7 +2,6 @@ mod commands;
 mod keyboard;
 mod notch;
 mod sidecar;
-mod tray;
 mod window;
 
 use tauri::Manager;
@@ -28,6 +27,8 @@ pub fn run() {
             commands::accept_edits_session,
             commands::bypass_permissions_session,
             commands::resume_session,
+            commands::open_settings,
+            commands::quit_app,
         ])
         .setup(|app| {
             let win = app.get_webview_window("main").expect("main window");
@@ -53,8 +54,8 @@ pub fn run() {
 
             window::show_without_activation(&win);
 
-            // System tray
-            tray::setup_tray(&app.handle().clone());
+            // Detect cursor hover over the notch even when unfocused
+            window::start_hover_watcher(app.handle().clone());
 
             // Spawn the Node.js sidecar (non-fatal if it fails)
             let handle = app.handle().clone();

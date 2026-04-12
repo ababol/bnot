@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { useEffect, useRef } from "react";
 import { useSession } from "../context/session-context";
 import { contextPercent, isWorking } from "../context/types";
 import { useHeroSession } from "../hooks/use-hero-session";
@@ -45,13 +46,43 @@ export default function CompactView({ notchWidth }: Props) {
     }
   }, [state.panelState, hasApproval, dispatch]);
 
-  const handleClick = () => {
-    setPanelState(dispatch, "overview");
+  const hoverTimer = useRef<number | null>(null);
+  const openOverview = () => setPanelState(dispatch, "overview");
+  const handleEnter = () => {
+    if (hoverTimer.current !== null) return;
+    hoverTimer.current = window.setTimeout(() => {
+      hoverTimer.current = null;
+      openOverview();
+    }, 150);
   };
+  const handleLeave = () => {
+    if (hoverTimer.current !== null) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+  };
+
+  // Native cursor-tracking from Rust: fires even when window is not focused.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<{ trigger: boolean; zone: boolean }>("notch-hover", (event) => {
+      if (event.payload.trigger) handleEnter();
+      else handleLeave();
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      unlisten?.();
+      handleLeave();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
-      onClick={handleClick}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      onClick={openOverview}
       className="flex h-full w-full cursor-pointer items-center rounded-b-[10px] bg-black"
     >
       {/* Left wing */}

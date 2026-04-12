@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { useEffect } from "react";
 import { useSession } from "../context/session-context";
 import { buddyColorFromSessions } from "../lib/colors";
 import { jumpToSession, setPanelState } from "../lib/tauri";
@@ -29,6 +31,21 @@ export default function OverviewView({ notchHeight }: Props) {
 
   const close = () => setPanelState(dispatch, "compact");
 
+  // Collapse when the cursor leaves the expanded zone (native tracking — works
+  // even when the window doesn't have focus).
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<{ trigger: boolean; zone: boolean }>("notch-hover", (event) => {
+      if (!event.payload.zone) close();
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      unlisten?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSessionClick = (sessionId: string) => {
     setPanelState(dispatch, "compact");
     setTimeout(() => jumpToSession(sessionId), 80);
@@ -49,6 +66,16 @@ export default function OverviewView({ notchHeight }: Props) {
         <PixelBuddy color={buddyColor} isActive={true} />
         <span className="text-xs font-semibold text-text-secondary">Sessions</span>
         <div className="flex-1" />
+        <button
+          onClick={() => invoke("open_settings")}
+          title="Settings"
+          className="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent text-text-dim hover:text-text-muted"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
         <button
           onClick={close}
           className="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent text-[10px] font-bold text-text-dim hover:text-text-muted"

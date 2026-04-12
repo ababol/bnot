@@ -117,3 +117,15 @@ pub fn resume_session<R: Runtime>(app: AppHandle<R>, session_id: String, project
         serde_json::json!({ "sessionId": session_id, "projectPath": project_path }),
     );
 }
+
+#[command]
+pub fn open_settings() {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let config_path = format!("{home}/.buddy-notch/config.json");
+    let _ = std::process::Command::new("open").arg("-e").arg(&config_path).spawn();
+}
+
+#[command]
+pub fn quit_app<R: Runtime>(app: AppHandle<R>) {
+    app.exit(0);
+}
