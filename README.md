@@ -4,8 +4,6 @@ A macOS notch-panel app that monitors Claude Code sessions in real time. Lives i
 
 Inspired by [vibeisland.app](https://vibeisland.app/).
 
-https://github.com/user-attachments/assets/placeholder
-
 ## Features
 
 - **Auto-detects all running Claude Code sessions** via process scanning and hook integration
@@ -92,33 +90,42 @@ bnot/
       src/
         lib.rs              # App setup, deep-link handler
         commands.rs         # 15 Tauri IPC commands (navigation, session, approval, system)
+        main.rs             # Binary entry point
         window.rs           # NSAnimationContext transitions, acceptsFirstMouse swizzle, hover watcher
         notch.rs            # NSScreen notch geometry detection
         keyboard.rs         # CGEvent injection for Ghostty tab/pane navigation
         sidecar.rs          # Node.js child process lifecycle
     web/                    # React + Tailwind frontend
       src/
-        components/         # compact-view, overview-view, session-card, pixel-bnot,
-                            # pixel-bell, pixel-progress-bar, diff-view, status-indicator, context-menu
+        components/         # notch-content, compact-view, overview-view, session-card,
+                            # history-card, settings-menu, pixel-bnot, pixel-bell,
+                            # pixel-progress-bar, diff-view, status-indicator, context-menu
         context/            # SessionContext (useReducer), types, derived helpers
         hooks/              # use-tauri-events, use-timer, use-hero-session
         lib/                # colors (bnot traits), format (time/tokens), tauri (IPC wrappers)
   packages/
     sidecar/                # Node.js backend
       src/
+        index.ts            # Entry point, Tauri IPC over stdin/stdout NDJSON
+        ipc.ts              # NDJSON request/response router
         process-scanner.ts  # Detects Claude processes via ps, reads git info
         context-scanner.ts  # Estimates context tokens from JSONL, queries exact counts
         session-manager.ts  # Manages session state from socket messages
         socket-server.ts    # Unix domain socket server for bridge communication
-        ghostty-tab-mapper.ts  # Focuses terminals via AppleScript + TTY markers
+        ghostty-tab-mapper.ts   # Focuses Ghostty tabs via AppleScript + TTY markers
+        ghostty-focus-watcher.ts # Tracks the active Ghostty tab as hero session
         terminal-jumper.ts  # Terminal app detection and jump coordination
         history-scanner.ts  # Scans ~/.claude/projects for resumable sessions
         hook-installer.ts   # Auto-installs hooks into ~/.claude/settings.json
+        repo-finder.ts      # Scans configured directories for git repos
+        worktree-creator.ts # Creates git worktrees for PR branches
+        session-launcher.ts # Spawns Claude Code in a new terminal
         paths.ts            # Shared path constants (CLAUDE_DIR, RUNTIME_DIR, etc.)
         terminal-utils.ts   # Shell/AppleScript string escaping
+        types.ts            # Shared TypeScript types
     bridge/                 # Rust CLI hook handler
       src/
-        main.rs             # pre-tool, post-tool, notify, stop subcommands
+        main.rs             # user-prompt, pre-tool, post-tool, perm-request, notify, stop subcommands
         hook_input.rs       # Hook JSON deserialization
 ```
 
@@ -148,7 +155,7 @@ When you click a session, Bnot focuses the correct terminal:
 
 ### Approval Flow
 
-For dangerous tools (Bash, Edit, Write, NotebookEdit, MultiEdit), the bridge blocks and waits for a response from the sidecar. The sidecar shows the approval UI in the notch panel, and when the user approves or denies, sends the response back through the socket. The bridge then prints `{"decision":"allow"}` or `{"decision":"deny"}` to stdout for Claude Code to consume.
+For dangerous tools (Bash, Edit, Write, NotebookEdit, MultiEdit), the bridge blocks on the socket with a 120s timeout, waiting for a response from the sidecar. The sidecar shows the approval UI in the notch panel, and when the user approves or denies, sends the response back through the socket. The bridge then emits Claude Code's `hookSpecificOutput` JSON (`{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` or `"deny"`) to stdout.
 
 ## Configuration
 
