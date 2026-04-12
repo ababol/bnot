@@ -2,7 +2,12 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect, useRef } from "react";
 import type { SessionAction } from "../context/session-context";
-import type { AgentSession, HistorySession, PanelState } from "../context/types";
+import {
+  PANEL_STATES,
+  type AgentSession,
+  type HistorySession,
+  type PanelState,
+} from "../context/types";
 import { playSound } from "../lib/sound";
 import { collapsePanel, setPanelState } from "../lib/tauri";
 
@@ -11,13 +16,9 @@ interface SessionsUpdatedPayload {
   heroId: string | null;
 }
 
-const VALID_PANEL_STATES: Set<string> = new Set([
-  "compact",
-  "alert",
-  "overview",
-  "approval",
-  "ask",
-]);
+function isPanelState(raw: unknown): raw is PanelState {
+  return typeof raw === "string" && (PANEL_STATES as readonly string[]).includes(raw);
+}
 
 export function useTauriEvents(
   dispatch: React.Dispatch<SessionAction>,
@@ -53,11 +54,11 @@ export function useTauriEvents(
 
     listen<{ state: string }>("panelStateChange", (event) => {
       const raw = event.payload.state;
-      if (typeof raw !== "string" || !VALID_PANEL_STATES.has(raw)) return;
+      if (!isPanelState(raw)) return;
       if (raw === "alert") {
         playSound("/alert.mp3");
       }
-      setPanelState(dispatch, raw as PanelState);
+      setPanelState(dispatch, raw);
     }).then((u) => unlisten.push(u));
 
     listen<{ history: HistorySession[] }>("historyUpdated", (event) => {

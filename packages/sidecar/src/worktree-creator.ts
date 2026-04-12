@@ -317,4 +317,3 @@ function runShellCommand(command: string, cwd: string, repoPath: string): Promis
     });
   });
 }
-

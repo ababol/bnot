@@ -20,9 +20,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_notch_geometry,
             commands::set_panel_state,
-            commands::send_goto_tab,
-            commands::navigate_pane,
-            commands::activate_app,
             commands::jump_to_session,
             commands::answer_question,
             commands::approve_session,

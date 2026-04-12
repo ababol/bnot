@@ -1,4 +1,3 @@
-use crate::keyboard;
 use crate::notch::{self, NotchGeometry};
 use crate::window;
 use tauri::{command, AppHandle, Manager, Runtime};
@@ -28,21 +27,6 @@ pub fn set_panel_state<R: Runtime>(app: AppHandle<R>, state: String) -> Result<(
     }
 
     Ok(())
-}
-
-#[command]
-pub fn send_goto_tab(tab: u16) {
-    keyboard::send_goto_tab(tab);
-}
-
-#[command]
-pub fn navigate_pane(reset_count: u16, forward_count: u16) {
-    keyboard::navigate_pane(reset_count, forward_count);
-}
-
-#[command]
-pub fn activate_app(bundle_id: String) -> bool {
-    keyboard::activate_app(&bundle_id)
 }
 
 #[command]

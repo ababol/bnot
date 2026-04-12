@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AgentSession, PanelState } from "../context/types";
+import { needsAttention, type AgentSession, type PanelState } from "../context/types";
 
 export function setPanelState(
   dispatch: React.Dispatch<{ type: "SET_PANEL_STATE"; panelState: PanelState }>,
@@ -16,9 +16,7 @@ export function collapsePanel(
   dispatch: React.Dispatch<{ type: "SET_PANEL_STATE"; panelState: PanelState }>,
   sessions: Record<string, AgentSession>,
 ): void {
-  const hasPending = Object.values(sessions).some(
-    (s) => s.status === "waitingApproval" || s.status === "waitingAnswer",
-  );
+  const hasPending = Object.values(sessions).some(needsAttention);
   setPanelState(dispatch, hasPending ? "alert" : "compact");
 }
 

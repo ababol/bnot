@@ -79,6 +79,23 @@ pnpm build
 
 Produces a `.app` bundle in `apps/desktop/target/release/bundle/`.
 
+### Installing a Release DMG
+
+Bnot releases are **not code-signed or notarized** yet, so macOS Gatekeeper will block the app (on macOS Sequoia you'll see _"Apple could not verify 'Bnot' is free of malware"_ with only **Move to Trash** / **Done** — right-click → Open no longer bypasses this).
+
+> _Temporary:_ an Apple Developer account is on the way and future releases will be properly signed and notarized, so this workaround will go away.
+
+To install:
+
+1. Open the DMG and drag `Bnot.app` to `/Applications`.
+2. Strip the quarantine attribute from a terminal:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Bnot.app
+   ```
+3. Launch Bnot normally.
+
+If you'd rather not run that command, build from source with `pnpm build` instead.
+
 ### Accessibility Permission
 
 CGEvent keyboard injection (for terminal tab jumping) requires macOS Accessibility permission. The OS will prompt on first use.

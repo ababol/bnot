@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { useSession } from "../context/session-context";
-import { contextPercent, isWorking } from "../context/types";
+import { contextPercent, isWorking, needsAttention } from "../context/types";
 import { useHeroSession } from "../hooks/use-hero-session";
 import { useTimer } from "../hooks/use-timer";
 import type { BnotColor } from "../lib/colors";
@@ -20,9 +20,7 @@ export default function CompactView({ notchWidth }: Props) {
   const sessions = state.sessions;
   const heroSession = useHeroSession();
   const sessionCount = Object.values(sessions).filter((s) => s.status !== "completed").length;
-  const hasApproval = Object.values(sessions).some(
-    (s) => s.status === "waitingApproval" || s.status === "waitingAnswer",
-  );
+  const hasApproval = Object.values(sessions).some(needsAttention);
   const notchGap = notchWidth + 16;
   const heroPct = heroSession ? contextPercent(heroSession) : 0;
   const barColor: BnotColor = heroPct > 0.85 ? "red" : heroPct > 0.6 ? "orange" : "green";

@@ -3,7 +3,8 @@ import type { BnotColor } from "../lib/colors";
 export type SessionStatus = "active" | "waitingApproval" | "waitingAnswer" | "completed" | "error";
 export type SessionMode = "normal" | "plan" | "auto" | "dangerous";
 
-export type PanelState = "compact" | "alert" | "overview" | "approval" | "ask";
+export const PANEL_STATES = ["compact", "alert", "overview", "approval", "ask"] as const;
+export type PanelState = (typeof PANEL_STATES)[number];
 
 export interface NotchGeometry {
   centerX: number;
@@ -119,6 +120,10 @@ export function isWorking(s: AgentSession, _now: number): boolean {
 
 export function isIdle(s: AgentSession, now: number): boolean {
   return s.status === "active" && !isWorking(s, now);
+}
+
+export function needsAttention(s: AgentSession): boolean {
+  return s.status === "waitingApproval" || s.status === "waitingAnswer";
 }
 
 export function projectName(s: HistorySession): string {

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { useSession } from "../context/session-context";
+import { needsAttention } from "../context/types";
 import { bnotColorFromSessions } from "../lib/colors";
 import { collapsePanel, jumpToSession } from "../lib/tauri";
 import HistoryCard from "./history-card";
@@ -12,6 +13,10 @@ import SettingsMenu from "./settings-menu";
 interface Props {
   notchHeight: number;
 }
+
+// Wait out the panel collapse animation (ANIMATION_DURATION in apps/desktop/src/window.rs)
+// before triggering the next action, so focus handoff doesn't race the shrink.
+const COLLAPSE_SETTLE_MS = 80;
 
 export default function OverviewView({ notchHeight }: Props) {
   const { state, dispatch } = useSession();
@@ -29,17 +34,13 @@ export default function OverviewView({ notchHeight }: Props) {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [settingsOpen]);
   const sortedSessions = Object.values(sessions).sort((a, b) => {
-    // Approval/question sessions first
-    const aPriority = a.status === "waitingApproval" || a.status === "waitingAnswer" ? 0 : 1;
-    const bPriority = b.status === "waitingApproval" || b.status === "waitingAnswer" ? 0 : 1;
-    if (aPriority !== bPriority) return aPriority - bPriority;
+    const priorityDelta = Number(needsAttention(b)) - Number(needsAttention(a));
+    if (priorityDelta !== 0) return -priorityDelta;
     // Newest first, oldest last — so a session's rank stays stable as
     // newer sessions appear above it, and it drifts toward the bottom.
     return b.startedAt - a.startedAt;
   });
-  const prioritySession = sortedSessions.find(
-    (s) => s.status === "waitingApproval" || s.status === "waitingAnswer",
-  );
+  const prioritySession = sortedSessions.find(needsAttention);
   const heroId = prioritySession?.id ?? state.heroSessionId ?? sortedSessions[0]?.id ?? null;
   const bnotColor = bnotColorFromSessions(sessions);
 
@@ -61,12 +62,12 @@ export default function OverviewView({ notchHeight }: Props) {
 
   const handleSessionClick = (sessionId: string) => {
     collapsePanel(dispatch, sessions);
-    setTimeout(() => jumpToSession(sessionId), 80);
+    setTimeout(() => jumpToSession(sessionId), COLLAPSE_SETTLE_MS);
   };
 
   const handleResumeClick = (sessionId: string, projectPath: string) => {
     collapsePanel(dispatch, sessions);
-    setTimeout(() => invoke("resume_session", { sessionId, projectPath }), 80);
+    setTimeout(() => invoke("resume_session", { sessionId, projectPath }), COLLAPSE_SETTLE_MS);
   };
 
   return (

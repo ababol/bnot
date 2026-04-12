@@ -8,6 +8,7 @@ import {
   isIdle,
   isWorking,
   MODE_BADGE,
+  needsAttention,
   STATUS_BNOT,
   STATUS_TEXT,
   STATUS_TEXT_COLORS,
@@ -54,10 +55,17 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
   const approval = session.pendingApproval;
   const question = session.pendingQuestion;
 
-  const selectOption = (index: number) => {
-    invoke("answer_question", { sessionId: session.id, optionIndex: index });
+  const runAction = (cmd: string, extra?: Record<string, unknown>) => {
+    invoke(cmd, { sessionId: session.id, ...extra });
     collapseAfterAction();
   };
+  const runActionOnClick =
+    (cmd: string, extra?: Record<string, unknown>) => (e: React.MouseEvent) => {
+      e.stopPropagation();
+      runAction(cmd, extra);
+    };
+
+  const selectOption = (index: number) => runAction("answer_question", { optionIndex: index });
 
   const handleOptionClick = (e: React.MouseEvent, index: number) => {
     e.stopPropagation();
@@ -77,40 +85,12 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [question]);
 
-  const handleApprove = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    invoke("approve_session", { sessionId: session.id });
-    collapseAfterAction();
-  };
-
-  const handleApproveAlways = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    invoke("approve_session_always", { sessionId: session.id });
-    collapseAfterAction();
-  };
-
-  const handleDeny = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    invoke("deny_session", { sessionId: session.id, feedback: null });
-    collapseAfterAction();
-  };
-
-  const handleAcceptEdits = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    invoke("accept_edits_session", { sessionId: session.id });
-    collapseAfterAction();
-  };
-
-  const handleBypass = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    invoke("bypass_permissions_session", { sessionId: session.id });
-    collapseAfterAction();
-  };
-
-  const handleFeedbackSubmit = (text: string) => {
-    invoke("deny_session", { sessionId: session.id, feedback: text });
-    collapseAfterAction();
-  };
+  const handleApprove = runActionOnClick("approve_session");
+  const handleApproveAlways = runActionOnClick("approve_session_always");
+  const handleDeny = runActionOnClick("deny_session", { feedback: null });
+  const handleAcceptEdits = runActionOnClick("accept_edits_session");
+  const handleBypass = runActionOnClick("bypass_permissions_session");
+  const handleFeedbackSubmit = (text: string) => runAction("deny_session", { feedback: text });
 
   return (
     <div
@@ -134,9 +114,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
         <div className="shrink-0 font-mono text-[10px] text-text-dim">
           {idle ? formatIdle(elapsed) : formatElapsed(elapsed)}
         </div>
-        {(session.status === "waitingApproval" || session.status === "waitingAnswer") && (
-          <PixelBell />
-        )}
+        {needsAttention(session) && <PixelBell />}
       </div>
 
       {/* ExitPlanMode UI — plan review with feedback */}
