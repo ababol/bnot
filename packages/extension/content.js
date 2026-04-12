@@ -9,30 +9,24 @@
 
     const [, owner, repo] = urlMatch;
 
-    // Find any head branch link to extract metadata
+    // Head branch link's direct parent is a DIV; base branch link's parent is a SPAN.
     const branchLinks = document.querySelectorAll('a[class*="BranchName"][href*="/tree/"]');
-
-    // Head branch links are inside a div with a copy button sibling
+    let head = null;
+    let baseBranch = null;
     for (const link of branchLinks) {
-      const container = link.closest("div");
-      if (!container) continue;
-      // The head branch container has a copy button
-      if (!container.querySelector('[class*="CopyToClipboard"], button[aria-labelledby]')) continue;
-
       const href = link.getAttribute("href") || "";
       const hrefMatch = href.match(/\/([^/]+)\/([^/]+)\/tree\/(.+)/);
       if (!hrefMatch) continue;
 
-      return {
-        owner,
-        repo,
-        headOwner: hrefMatch[1],
-        headRepo: hrefMatch[2],
-        branch: hrefMatch[3],
-      };
+      if (link.parentElement?.tagName === "DIV" && !head) {
+        head = { headOwner: hrefMatch[1], headRepo: hrefMatch[2], branch: hrefMatch[3] };
+      } else if (!baseBranch) {
+        baseBranch = hrefMatch[3];
+      }
     }
 
-    return null;
+    if (!head) return null;
+    return { owner, repo, ...head, baseBranch };
   }
 
   function createButton(meta) {
@@ -88,6 +82,7 @@
         headOwner: meta.headOwner,
         headRepo: meta.headRepo,
       });
+      if (meta.baseBranch) params.set("baseBranch", meta.baseBranch);
 
       window.location.href = `bnot://worktree?${params.toString()}`;
     });
@@ -99,11 +94,9 @@
     const meta = getPRMetadata();
     if (!meta) return;
 
-    // Find all head branch containers (the ones with the copy button)
     const branchLinks = document.querySelectorAll('a[class*="BranchName"][href*="/tree/"]');
 
     for (const link of branchLinks) {
-      // Head branch link's direct parent is a div; base branch is inside a span
       const parent = link.parentElement;
       if (!parent || parent.tagName !== "DIV") continue;
 

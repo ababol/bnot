@@ -1,12 +1,13 @@
 import { execFile, spawn } from "child_process";
-import { readFile } from "fs/promises";
+import { readdir, readFile, rm } from "fs/promises";
 import { platform } from "os";
 import { dirname, resolve as resolvePath } from "path";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
 import { RepoFinder } from "./repo-finder.js";
-import { detectRunningTerminal } from "./terminal-jumper.js";
-import { escapeShell } from "./terminal-utils.js";
+import { startNewSession } from "./session-launcher.js";
+import { SessionManager } from "./session-manager.js";
+import { jumpToSession } from "./terminal-jumper.js";
 
 const exec = promisify(execFile);
 
@@ -32,9 +33,14 @@ interface WorktreeInfo {
 }
 
 export class WorktreeCreator {
-  constructor(private repoFinder: RepoFinder) {}
+  constructor(
+    private repoFinder: RepoFinder,
+    private sessionManager: SessionManager,
+  ) {}
 
-  async open(req: WorktreeRequest): Promise<{ success: boolean; path?: string; error?: string }> {
+  async open(
+    req: WorktreeRequest,
+  ): Promise<{ success: boolean; path?: string; error?: string; skipped?: boolean }> {
     process.stderr.write(`[worktree] request: ${req.headOwner}/${req.headRepo}#${req.branch}\n`);
 
     // 1. Find local repo
@@ -43,10 +49,10 @@ export class WorktreeCreator {
       repoPath = await this.repoFinder.findRepo(req.owner, req.repo);
     }
     if (!repoPath) {
-      const msg = `Repository ${req.owner}/${req.repo} not found locally`;
-      process.stderr.write(`[worktree] ${msg}\n`);
-      emit("worktreeStatus", { status: "error", message: msg });
-      return { success: false, error: msg };
+      process.stderr.write(
+        `[worktree] ${req.owner}/${req.repo} not found in configured directories, skipping\n`,
+      );
+      return { success: true, skipped: true };
     }
 
     process.stderr.write(`[worktree] found repo at ${repoPath}\n`);
@@ -55,7 +61,7 @@ export class WorktreeCreator {
     const existing = await this.findExistingWorktree(repoPath, req.branch);
     if (existing) {
       process.stderr.write(`[worktree] existing worktree found at ${existing.path}\n`);
-      await openTerminal(existing.path);
+      await this.launchOrJump(existing.path);
       emit("worktreeStatus", {
         status: "success",
         message: `Opened existing worktree: ${existing.branch}`,
@@ -129,14 +135,27 @@ export class WorktreeCreator {
     // 5.5 Run Cursor-style setup (best-effort; failures don't abort)
     await this.runCursorSetup(worktreePath, repoPath);
 
-    // 6. Open terminal
-    await openTerminal(worktreePath);
+    // 6. Launch claude in worktree (or jump to an active session there)
+    await this.launchOrJump(worktreePath);
     emit("worktreeStatus", {
       status: "success",
       message: `Worktree created: ${dirName}`,
       path: worktreePath,
     });
     return { success: true, path: worktreePath };
+  }
+
+  private async launchOrJump(worktreePath: string): Promise<void> {
+    const active = Object.values(this.sessionManager.sessions).find(
+      (s) => s.workingDirectory === worktreePath && s.status !== "completed",
+    );
+    if (active) {
+      process.stderr.write(`[worktree] jumping to active session ${active.id}\n`);
+      await jumpToSession(active);
+    } else {
+      process.stderr.write(`[worktree] launching new claude session at ${worktreePath}\n`);
+      await startNewSession(worktreePath);
+    }
   }
 
   private async runCursorSetup(worktreePath: string, repoPath: string): Promise<void> {
@@ -149,7 +168,7 @@ export class WorktreeCreator {
       return;
     }
 
-    const commands = Array.isArray(spec) ? spec : [resolvePath(loaded.dir, spec)];
+    const commands = Array.isArray(spec) ? spec : [spec];
 
     emit("worktreeStatus", {
       status: "settingUp",
@@ -178,6 +197,10 @@ export class WorktreeCreator {
     branch: string,
   ): Promise<WorktreeInfo | null> {
     try {
+      // Drop admin records for worktree dirs the user deleted on disk, so we
+      // don't match a stale path and then fail to cd into it.
+      await exec("git", ["-C", repoPath, "worktree", "prune"], { timeout: 5000 }).catch(() => {});
+
       const { stdout } = await exec("git", ["-C", repoPath, "worktree", "list", "--porcelain"], {
         timeout: 5000,
       });
@@ -191,7 +214,17 @@ export class WorktreeCreator {
           const ref = line.slice("branch ".length); // refs/heads/branch-name
           const branchName = ref.replace("refs/heads/", "");
           if (branchName === branch && resolvePath(currentPath) !== mainPath) {
-            return { path: currentPath, branch: branchName };
+            if (await hasRealCheckout(currentPath)) {
+              return { path: currentPath, branch: branchName };
+            }
+            process.stderr.write(
+              `[worktree] stale/empty worktree at ${currentPath}, will recreate\n`,
+            );
+            await exec("git", ["-C", repoPath, "worktree", "remove", "--force", currentPath], {
+              timeout: 5000,
+            }).catch(() => {});
+            await rm(currentPath, { recursive: true, force: true }).catch(() => {});
+            return null;
           }
         }
       }
@@ -208,6 +241,15 @@ export class WorktreeCreator {
     } catch {
       return false;
     }
+  }
+}
+
+async function hasRealCheckout(worktreePath: string): Promise<boolean> {
+  try {
+    const entries = await readdir(worktreePath);
+    return entries.some((e) => e !== ".git");
+  } catch {
+    return false;
   }
 }
 
@@ -276,23 +318,3 @@ function runShellCommand(command: string, cwd: string, repoPath: string): Promis
   });
 }
 
-async function openTerminal(dir: string): Promise<void> {
-  const terminal = await detectRunningTerminal();
-
-  try {
-    if (terminal === "ghostty") {
-      await exec("/usr/bin/open", ["-a", "Ghostty", dir]);
-    } else if (terminal === "iterm") {
-      const script = `
-tell application "iTerm2"
-  activate
-  create window with default profile command "cd ${escapeShell(dir)} && exec $SHELL"
-end tell`;
-      await exec("/usr/bin/osascript", ["-e", script]);
-    } else {
-      await exec("/usr/bin/open", ["-a", "Terminal", dir]);
-    }
-  } catch (err) {
-    process.stderr.write(`[worktree] failed to open terminal: ${err}\n`);
-  }
-}

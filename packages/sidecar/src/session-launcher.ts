@@ -6,16 +6,18 @@ import { escapeForAppleScript, escapeShell } from "./terminal-utils.js";
 const exec = promisify(execFile);
 
 export async function resumeSession(sessionId: string, projectPath: string): Promise<void> {
-  const terminal = (await detectRunningTerminal()).toLowerCase();
-  const escapedPath = escapeShell(projectPath);
-  const command = `cd '${escapedPath}' && claude --resume ${sessionId}`;
+  await launchCommand(`cd '${escapeShell(projectPath)}' && claude --resume ${sessionId}`);
+}
 
+export async function startNewSession(projectPath: string): Promise<void> {
+  await launchCommand(`cd '${escapeShell(projectPath)}' && claude`);
+}
+
+async function launchCommand(command: string): Promise<void> {
+  const terminal = (await detectRunningTerminal()).toLowerCase();
   if (terminal.includes("iterm")) {
     await launchInITerm(command);
-  } else if (terminal.includes("ghostty")) {
-    await launchInGhostty(command);
   } else {
-    // Fallback: use default terminal via open
     await launchInGhostty(command);
   }
 }

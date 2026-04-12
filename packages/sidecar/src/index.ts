@@ -41,7 +41,7 @@ function resolveApproval(
 
 const sessionManager = new SessionManager();
 const repoFinder = new RepoFinder();
-const worktreeCreator = new WorktreeCreator(repoFinder);
+const worktreeCreator = new WorktreeCreator(repoFinder, sessionManager);
 const socketServer = new SocketServer((msg, clientFd) => {
   sessionManager.handleMessage(msg, clientFd);
 });
