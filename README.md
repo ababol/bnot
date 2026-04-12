@@ -47,16 +47,9 @@ Bnot turns your MacBook's notch into a live radar for every Claude Code session 
 
 ### Download the DMG
 
-Bnot releases are **not code-signed or notarized** yet, so macOS Gatekeeper will block the app (on macOS Sequoia you'll see _"Apple could not verify 'Bnot' is free of malware"_ with only **Move to Trash** / **Done** — right-click → Open no longer bypasses this).
-
-> _Temporary:_ an Apple Developer account is on the way and future releases will be properly signed and notarized, so this workaround will go away.
-
-1. Open the DMG and drag `Bnot.app` to `/Applications`.
-2. Strip the quarantine attribute from a terminal:
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Bnot.app
-   ```
-3. Launch Bnot normally.
+1. Download the latest `.dmg` from the [Releases page](https://github.com/ababol/bnot/releases/latest).
+2. Open it and drag `Bnot.app` to `/Applications`.
+3. Launch Bnot.
 
 ### Build from source
 

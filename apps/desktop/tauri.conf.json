@@ -7,7 +7,7 @@
     "frontendDist": "../web/dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "pnpm --filter web dev",
-    "beforeBuildCommand": "pnpm --filter web build && pnpm --filter bnot-sidecar build && cargo build -p bnot-bridge --release"
+    "beforeBuildCommand": "pnpm --filter web build && pnpm --filter bnot-sidecar build"
   },
   "app": {
     "macOSPrivateApi": true,
@@ -49,6 +49,12 @@
     "resources": {
       "../../packages/sidecar/dist/index.mjs": "sidecar/index.mjs",
       "../../target/release/bnot-bridge": "bin/bnot-bridge"
+    },
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "entitlements": "entitlements.plist",
+      "hardenedRuntime": true,
+      "signingIdentity": "-"
     },
     "icon": [
       "icons/32x32.png",

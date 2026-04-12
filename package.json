@@ -2,8 +2,8 @@
   "name": "bnot",
   "private": true,
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
+    "dev": "cargo build -p bnot-bridge --release && tauri dev",
+    "build": "cargo build -p bnot-bridge --release && tauri build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
