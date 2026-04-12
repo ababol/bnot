@@ -23,8 +23,6 @@ export default function CompactView({ notchWidth }: Props) {
   const hasApproval = Object.values(sessions).some(
     (s) => s.status === "waitingApproval" || s.status === "waitingAnswer",
   );
-  const isJump = state.panelState === "jump";
-
   const notchGap = notchWidth + 16;
   const heroPct = heroSession ? contextPercent(heroSession) : 0;
   const barColor: BuddyColor = heroPct > 0.85 ? "red" : heroPct > 0.6 ? "orange" : "green";
@@ -87,29 +85,25 @@ export default function CompactView({ notchWidth }: Props) {
     >
       {/* Left wing */}
       <div className="flex flex-1 items-center justify-start pl-2">
-        {isJump ? (
-          <span className="text-base text-buddy-green">&#x2713;</span>
-        ) : (
-          <div className="flex items-center">
-            {heroSession && (
-              <div className="relative mr-0.5 h-[18px] w-[5px] overflow-hidden rounded-sm bg-white/10">
-                <div
-                  className="absolute bottom-0 w-full rounded-sm"
-                  style={{
-                    height: `${Math.max(Math.min(heroPct, 1) * 100, 10)}%`,
-                    backgroundColor: MAIN_COLORS[barColor],
-                  }}
-                />
-              </div>
-            )}
-            <PixelBuddy color={heroColor} isActive={heroIsWorking} traits={heroTraits} size="lg" />
-            {heroDot && (
-              <div className="ml-0.5">
-                <StatusIndicator dot={heroDot} size="lg" />
-              </div>
-            )}
-          </div>
-        )}
+        <div className="flex items-center">
+          {heroSession && (
+            <div className="relative mr-0.5 h-[18px] w-[5px] overflow-hidden rounded-sm bg-white/10">
+              <div
+                className="absolute bottom-0 w-full rounded-sm"
+                style={{
+                  height: `${Math.max(Math.min(heroPct, 1) * 100, 10)}%`,
+                  backgroundColor: MAIN_COLORS[barColor],
+                }}
+              />
+            </div>
+          )}
+          <PixelBuddy color={heroColor} isActive={heroIsWorking} traits={heroTraits} size="lg" />
+          {heroDot && (
+            <div className="ml-0.5">
+              <StatusIndicator dot={heroDot} size="lg" />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Center notch dead zone */}

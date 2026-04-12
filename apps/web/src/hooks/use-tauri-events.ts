@@ -16,7 +16,6 @@ const VALID_PANEL_STATES: Set<string> = new Set([
   "overview",
   "approval",
   "ask",
-  "jump",
 ]);
 
 export function useTauriEvents(dispatch: React.Dispatch<SessionAction>, panelState: string) {
@@ -54,7 +53,6 @@ export function useTauriEvents(dispatch: React.Dispatch<SessionAction>, panelSta
     if (
       panelState === "compact" ||
       panelState === "alert" ||
-      panelState === "jump" ||
       panelState === "approval" ||
       panelState === "ask"
     )

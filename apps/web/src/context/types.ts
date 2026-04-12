@@ -3,7 +3,7 @@ import type { BuddyColor } from "../lib/colors";
 export type SessionStatus = "active" | "waitingApproval" | "waitingAnswer" | "completed" | "error";
 export type SessionMode = "normal" | "plan" | "auto" | "dangerous";
 
-export type PanelState = "compact" | "alert" | "overview" | "approval" | "ask" | "jump";
+export type PanelState = "compact" | "alert" | "overview" | "approval" | "ask";
 
 export interface NotchGeometry {
   centerX: number;
@@ -71,6 +71,7 @@ export interface AgentSession {
   taskStartedAt?: number;
   currentTool?: string;
   currentFilePath?: string;
+  isThinking?: boolean;
   pendingApproval?: ApprovalRequest;
   pendingQuestion?: QuestionRequest;
   contextTokens: number;
@@ -103,7 +104,7 @@ export interface HistorySession {
 
 // Derived helpers
 
-const ACTIVITY_RECENCY_MS = 10_000;
+const ACTIVITY_RECENCY_MS = 2_000;
 
 export function contextPercent(s: AgentSession): number {
   if (s.maxContextTokens <= 0) return 0;
@@ -116,7 +117,8 @@ export function directoryName(s: AgentSession): string {
 
 export function isWorking(s: AgentSession, now: number): boolean {
   return (
-    s.status === "active" && (s.currentTool != null || now - s.lastActivity < ACTIVITY_RECENCY_MS)
+    s.status === "active" &&
+    (s.currentTool != null || s.isThinking === true || now - s.lastActivity < ACTIVITY_RECENCY_MS)
   );
 }
 

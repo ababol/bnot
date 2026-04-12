@@ -98,8 +98,8 @@ buddynotch/
         sidecar.rs          # Node.js child process lifecycle
     web/                    # React + Tailwind frontend
       src/
-        components/         # compact-view, overview-view, session-card, jump-view,
-                            # pixel-buddy, pixel-progress-bar, diff-view, context-menu
+        components/         # compact-view, overview-view, session-card, pixel-buddy,
+                            # pixel-bell, pixel-progress-bar, diff-view, status-indicator, context-menu
         context/            # SessionContext (useReducer), types, derived helpers
         hooks/              # use-tauri-events, use-timer, use-hero-session
         lib/                # colors (buddy traits), format (time/tokens), tauri (IPC wrappers)

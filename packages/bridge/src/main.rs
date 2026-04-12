@@ -35,6 +35,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    #[command(name = "user-prompt")]
+    UserPrompt,
     #[command(name = "pre-tool")]
     PreTool,
     #[command(name = "post-tool")]
@@ -69,6 +71,35 @@ fn main() {
     auto_assign_color(&session_id, &cwd);
 
     match cli.command {
+        Commands::UserPrompt => {
+            // Fire on UserPromptSubmit — tells sidecar Claude has started thinking
+            // so the status dot flips to "working" immediately, before any tool runs.
+            let _ = send_message(&SocketMessage {
+                r#type: "sessionStart",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::SessionStart {
+                    session_start: SessionStartPayload {
+                        task_name: None,
+                        working_directory: &cwd,
+                        terminal_app: detect_terminal(),
+                        terminal_pid: get_parent_pid(),
+                    },
+                },
+                session_mode,
+            });
+
+            let _ = send_message(&SocketMessage {
+                r#type: "userPromptSubmit",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::UserPromptSubmit {
+                    user_prompt_submit: UserPromptSubmitPayload {},
+                },
+                session_mode,
+            });
+        }
+
         Commands::PreTool => {
             // Fire-and-forget: track tool usage, never block.
             // Permission approval is handled by the PermRequest subcommand.
@@ -543,7 +574,14 @@ enum Payload<'a> {
         #[serde(rename = "sessionEnd")]
         session_end: SessionEndPayload<'a>,
     },
+    UserPromptSubmit {
+        #[serde(rename = "userPromptSubmit")]
+        user_prompt_submit: UserPromptSubmitPayload,
+    },
 }
+
+#[derive(Serialize)]
+struct UserPromptSubmitPayload {}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

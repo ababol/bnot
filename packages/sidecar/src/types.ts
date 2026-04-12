@@ -8,7 +8,8 @@ export type MessageType =
   | "sessionStart"
   | "sessionEnd"
   | "stop"
-  | "heartbeat";
+  | "heartbeat"
+  | "userPromptSubmit";
 
 export interface SocketMessage {
   type: MessageType;
@@ -27,7 +28,12 @@ export type MessagePayload = {
   sessionEnd?: SessionEndPayload;
   stop?: StopPayload;
   heartbeat?: boolean;
+  userPromptSubmit?: UserPromptSubmitPayload;
 };
+
+export interface UserPromptSubmitPayload {
+  prompt?: string;
+}
 
 export interface PreToolUsePayload {
   toolName: string;
@@ -98,6 +104,7 @@ export interface AgentSession {
   taskStartedAt?: number;
   currentTool?: string;
   currentFilePath?: string;
+  isThinking?: boolean;
   pendingApproval?: {
     toolName: string;
     filePath?: string;

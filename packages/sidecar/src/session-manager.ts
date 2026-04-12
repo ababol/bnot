@@ -140,6 +140,15 @@ export class SessionManager {
         break;
       }
 
+      case "userPromptSubmit": {
+        this.ensureSession(sessionId, timestamp);
+        this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
+        this.sessions[sessionId].status = "active";
+        this.sessions[sessionId].isThinking = true;
+        this.heroSessionId = sessionId;
+        break;
+      }
+
       case "postToolUse": {
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
@@ -166,10 +175,6 @@ export class SessionManager {
         if (p.level === "success" || p.title.toLowerCase().includes("complete")) {
           this.sessions[sessionId].status = "completed";
           this.heroSessionId = sessionId;
-          emit("panelStateChange", { state: "jump", sessionId });
-          setTimeout(() => {
-            emit("panelStateChange", { state: "compact" });
-          }, PANEL_RESET_DELAY_MS);
         }
         break;
       }
@@ -177,14 +182,14 @@ export class SessionManager {
       case "sessionEnd": {
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].status = "completed";
+        this.sessions[sessionId].isThinking = false;
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         delete this.pendingApprovalClients[sessionId];
-
         this.heroSessionId = sessionId;
-        emit("panelStateChange", { state: "jump", sessionId });
 
+        // Keep the session visible in compact (with green check dot) for a moment,
+        // then remove it so the notch frees up.
         setTimeout(() => {
-          emit("panelStateChange", { state: "compact" });
           delete this.sessions[sessionId];
           this.emitUpdate();
         }, PANEL_RESET_DELAY_MS);
@@ -193,6 +198,7 @@ export class SessionManager {
 
       case "stop": {
         if (this.sessions[sessionId]) {
+          this.sessions[sessionId].isThinking = false;
           this.sessions[sessionId].status = "completed";
         }
         delete this.pendingApprovalClients[sessionId];

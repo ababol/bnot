@@ -5,6 +5,7 @@ import * as path from "path";
 const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 
 const REQUIRED_HOOKS: Record<string, string> = {
+  UserPromptSubmit: "user-prompt",
   PreToolUse: "pre-tool",
   PostToolUse: "post-tool",
   PermissionRequest: "perm-request",

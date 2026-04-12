@@ -62,7 +62,7 @@ const QUESTION_PIXELS: Array<[number, number]> = [
   [4, 8],
 ];
 
-const SPIN_INTERVAL_MS = 90;
+const SPIN_INTERVAL_MS = 180;
 
 export default function StatusIndicator({ dot, size = "sm" }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -102,15 +102,10 @@ export default function StatusIndicator({ dot, size = "sm" }: Props) {
     };
 
     if (dot === "working") {
+      // Single dot traveling around the ring — no trail, just a moving position
       const lead = tick % SPINNER_POSITIONS.length;
-      for (let i = 0; i < SPINNER_POSITIONS.length; i++) {
-        const dist = (lead - i + SPINNER_POSITIONS.length) % SPINNER_POSITIONS.length;
-        const alpha =
-          dist === 0 ? 1 : dist === 1 ? 0.65 : dist === 2 ? 0.35 : dist === 3 ? 0.15 : 0;
-        if (alpha === 0) continue;
-        const [x, y] = SPINNER_POSITIONS[i];
-        fill(x, y, alpha);
-      }
+      const [x, y] = SPINNER_POSITIONS[lead];
+      fill(x, y, 1);
     } else if (dot === "done") {
       for (const [x, y] of CHECK_PIXELS) fillSingle(x, y);
     } else if (dot === "waiting") {

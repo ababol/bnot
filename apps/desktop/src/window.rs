@@ -16,7 +16,7 @@ pub fn compact_frame(geom: &NotchGeometry) -> (f64, f64, f64) {
 /// Expanded frame for a given panel state: returns (x, y, width, height) in logical points.
 pub fn expanded_frame(state: &str, geom: &NotchGeometry) -> (f64, f64, f64, f64) {
     let (w, h) = match state {
-        "compact" | "jump" => {
+        "compact" => {
             let (x, w, h) = compact_frame(geom);
             return (x, 0.0, w, h);
         }

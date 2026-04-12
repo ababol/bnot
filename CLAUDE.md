@@ -46,7 +46,7 @@ React → invoke() → Tauri commands → Sidecar stdin NDJSON requests
 
 ### Panel States
 
-6 states managed by `SessionContext` reducer: `compact`, `alert`, `overview`, `approval`, `ask`, `jump`. `alert` is a widened `compact` used to flag pending approvals/questions via the bell pixel.
+5 states managed by `SessionContext` reducer: `compact`, `alert`, `overview`, `approval`, `ask`. `alert` is a widened `compact` used to flag pending approvals/questions via the bell pixel.
 
 State changes always go through `setPanelState(dispatch, state)` in `lib/tauri.ts`, which dispatches to React and invokes the Rust backend in one call.
 

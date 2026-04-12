@@ -2,7 +2,6 @@ import { useSession } from "../context/session-context";
 import type { NotchGeometry } from "../context/types";
 import CompactView from "./compact-view";
 import ContextMenu from "./context-menu";
-import JumpView from "./jump-view";
 import OverviewView from "./overview-view";
 
 export default function NotchContent({ geometry }: { geometry: NotchGeometry }) {
@@ -13,8 +12,6 @@ export default function NotchContent({ geometry }: { geometry: NotchGeometry }) 
       case "compact":
       case "alert":
         return <CompactView notchWidth={geometry.notchWidth} />;
-      case "jump":
-        return <JumpView notchHeight={geometry.notchHeight} />;
       case "overview":
       case "approval":
       case "ask":
