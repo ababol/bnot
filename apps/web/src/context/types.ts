@@ -1,19 +1,22 @@
 export type SessionStatus = "active" | "waitingApproval" | "waitingAnswer" | "completed" | "error";
 export type SessionMode = "normal" | "plan" | "auto" | "dangerous";
 
-export type PanelState = "compact" | "overview" | "approval" | "ask" | "jump";
+export type PanelState = "compact" | "alert" | "overview" | "approval" | "ask" | "jump";
 
 export interface ApprovalRequest {
   toolName: string;
   filePath?: string;
   input?: string;
   diffPreview?: string;
+  canRemember?: boolean;
   receivedAt: number;
 }
 
 export interface QuestionRequest {
   question: string;
+  header?: string;
   options: string[];
+  optionDescriptions?: string[];
   receivedAt: number;
 }
 

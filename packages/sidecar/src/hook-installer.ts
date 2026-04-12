@@ -20,10 +20,14 @@ export async function installHooksIfNeeded(bridgePath?: string) {
     return;
   }
 
-  // Check if already installed
+  // Check if already installed (look for buddy-bridge in any hook event)
   const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>;
-  const preToolUse = hooks.PreToolUse as Array<{ hooks?: Array<{ command?: string }> }> | undefined;
-  if (preToolUse?.some((entry) => entry.hooks?.some((h) => h.command?.includes("buddy-bridge")))) {
+  const hasBridge = Object.values(hooks).some((entries) =>
+    (entries as Array<{ hooks?: Array<{ command?: string }> }>)?.some((entry) =>
+      entry.hooks?.some((h) => h.command?.includes("buddy-bridge")),
+    ),
+  );
+  if (hasBridge) {
     process.stderr.write("[hookInstaller] hooks already installed\n");
     return;
   }
@@ -47,6 +51,7 @@ export async function installHooksIfNeeded(bridgePath?: string) {
 
   addHook("PreToolUse", "pre-tool");
   addHook("PostToolUse", "post-tool");
+  addHook("PermissionRequest", "perm-request");
   addHook("Notification", "notify");
   addHook("Stop", "stop");
 
@@ -63,8 +68,8 @@ export async function installHooksIfNeeded(bridgePath?: string) {
 async function findBridgePath(): Promise<string | null> {
   const cwd = process.cwd();
   const candidates = [
-    // Bundled inside .app Resources
-    path.resolve(cwd, "../Resources/bin/buddy-bridge"),
+    // Bundled inside .app Resources (sidecar cwd is Resources/sidecar/)
+    path.resolve(cwd, "../bin/buddy-bridge"),
     path.join(os.homedir(), ".local/bin/buddy-bridge"),
     "/usr/local/bin/buddy-bridge",
     path.resolve(cwd, "target/debug/buddy-bridge"),

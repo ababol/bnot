@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useSession } from "../context/session-context";
 import { contextPercent, isWorking } from "../context/types";
 import { useHeroSession } from "../hooks/use-hero-session";
@@ -5,6 +6,7 @@ import { useTimer } from "../hooks/use-timer";
 import type { BuddyColor } from "../lib/colors";
 import { buddyTraitsFromId, MAIN_COLORS, parseBuddyColor, sessionStatusDot } from "../lib/colors";
 import { setPanelState } from "../lib/tauri";
+import PixelBell from "./pixel-bell";
 import PixelBuddy from "./pixel-buddy";
 
 interface Props {
@@ -16,6 +18,9 @@ export default function CompactView({ notchWidth }: Props) {
   const sessions = state.sessions;
   const heroSession = useHeroSession();
   const sessionCount = Object.values(sessions).filter((s) => s.status !== "completed").length;
+  const hasApproval = Object.values(sessions).some(
+    (s) => s.status === "waitingApproval" || s.status === "waitingAnswer",
+  );
   const isJump = state.panelState === "jump";
 
   const notchGap = notchWidth + 16;
@@ -32,6 +37,13 @@ export default function CompactView({ notchWidth }: Props) {
   const heroDot = heroSession
     ? sessionStatusDot(heroSession.status, heroIsWorking, heroSession.sessionMode)
     : undefined;
+
+  // Bounce to "alert" width when landing on compact with pending approval
+  useEffect(() => {
+    if (state.panelState === "compact" && hasApproval) {
+      setPanelState(dispatch, "alert");
+    }
+  }, [state.panelState, hasApproval, dispatch]);
 
   const handleClick = () => {
     setPanelState(dispatch, "overview");
@@ -73,7 +85,8 @@ export default function CompactView({ notchWidth }: Props) {
       <div className="shrink-0" style={{ width: notchGap }} />
 
       {/* Right wing */}
-      <div className="flex flex-1 items-center justify-end pr-2">
+      <div className="flex flex-1 items-center justify-end gap-1 pr-2">
+        {hasApproval && <PixelBell />}
         {sessionCount > 0 ? (
           <div className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-surface-active text-[11px] font-bold tabular-nums text-text-secondary">
             {sessionCount}

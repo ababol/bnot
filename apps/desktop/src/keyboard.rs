@@ -13,6 +13,7 @@ const KVK_ANSI_8: u16 = 0x1C;
 const KVK_ANSI_9: u16 = 0x19;
 const KVK_ANSI_LEFT_BRACKET: u16 = 0x21;
 const KVK_ANSI_RIGHT_BRACKET: u16 = 0x1E;
+const KVK_RETURN: u16 = 0x24;
 
 const TAB_KEYS: [u16; 9] = [
     KVK_ANSI_1,
@@ -50,6 +51,15 @@ pub fn send_goto_tab(tab: u16) {
         return;
     }
     send_key(TAB_KEYS[(tab - 1) as usize], CGEventFlags::CGEventFlagCommand);
+}
+
+/// Type a digit (1-9) — no modifiers, no Enter.
+/// Claude Code's AskUserQuestion auto-submits on number key press.
+pub fn type_digit(digit: u16) {
+    if !(1..=9).contains(&digit) {
+        return;
+    }
+    send_key(TAB_KEYS[(digit - 1) as usize], CGEventFlags::empty());
 }
 
 /// Navigate panes: reset to first (Cmd+[ x reset_count), then forward (Cmd+] x forward_count)

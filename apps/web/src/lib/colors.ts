@@ -129,7 +129,7 @@ export type StatusDot = "working" | "planning" | "waiting" | "idle";
 export const STATUS_DOT_COLORS: Record<StatusDot, string> = {
   working: "rgb(74, 222, 128)", // green
   planning: "rgb(97, 212, 222)", // cyan
-  waiting: "rgb(250, 230, 90)", // yellow
+  waiting: "rgb(250, 173, 87)", // orange
   idle: "rgb(120, 120, 130)", // gray
 };
 

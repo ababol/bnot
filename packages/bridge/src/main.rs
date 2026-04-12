@@ -9,39 +9,16 @@ mod hook_input;
 use hook_input::ClaudeHookInput;
 
 const SOCKET_PATH: &str = ".buddy-notch/buddy.sock";
-const DANGEROUS_TOOLS: &[&str] = &["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"];
-const MAX_PARENT_WALK: usize = 5;
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// Check if Claude Code is running in auto-approve mode by inspecting
-/// the process tree for --dangerously-skip-permissions.
-fn is_auto_approved() -> bool {
-    let mut pid = unsafe { libc::getppid() } as u32;
-    for _ in 0..MAX_PARENT_WALK {
-        if pid <= 1 {
-            break;
-        }
-        if let Ok(output) = std::process::Command::new("ps")
-            .args(["-p", &pid.to_string(), "-o", "ppid=,args="])
-            .output()
-        {
-            let s = String::from_utf8_lossy(&output.stdout);
-            if s.contains("dangerously-skip") {
-                return true;
-            }
-            pid = s.split_whitespace().next()
-                .and_then(|p| p.parse().ok())
-                .unwrap_or(0);
-        } else {
-            break;
-        }
-    }
-    false
-}
 
 #[derive(Deserialize)]
 struct ApprovalResponse {
-    action: String,
+    action: String, // "allow" | "allowAlways" | "deny" | "answer" | "acceptEdits" | "bypassPermissions"
+    #[serde(rename = "answerLabel")]
+    answer_label: Option<String>,
+    #[serde(rename = "questionText")]
+    question_text: Option<String>,
+    feedback: Option<String>,
 }
 
 fn socket_path() -> String {
@@ -62,6 +39,8 @@ enum Commands {
     PreTool,
     #[command(name = "post-tool")]
     PostTool,
+    #[command(name = "perm-request")]
+    PermRequest,
     Notify,
     Stop,
 }
@@ -91,7 +70,8 @@ fn main() {
 
     match cli.command {
         Commands::PreTool => {
-            // Build diff preview
+            // Fire-and-forget: track tool usage, never block.
+            // Permission approval is handled by the PermRequest subcommand.
             let diff = hook.as_ref().and_then(|h| {
                 let ti = h.tool_input.as_ref()?;
                 if let (Some(old), Some(new)) = (&ti.old_string, &ti.new_string) {
@@ -104,26 +84,89 @@ fn main() {
             let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
             let file_path = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.file_path.as_deref());
             let command = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.command.as_deref());
-            // Extract question/options: direct fields or from AskUserQuestion's `questions` array
-            let (question_owned, options_owned) = hook
+            let (question_owned, header_owned, options_owned, descriptions_owned) = hook
                 .as_ref()
                 .and_then(|h| {
                     let ti = h.tool_input.as_ref()?;
-                    // Try direct fields first
                     if ti.question.is_some() {
-                        return Some((ti.question.clone(), ti.options.clone()));
+                        return Some((ti.question.clone(), None::<String>, ti.options.clone(), None::<Vec<String>>));
                     }
-                    // AskUserQuestion uses `questions` array
                     let qi = ti.questions.as_ref()?.first()?;
                     let q = qi.question.clone();
+                    let hdr = qi.header.clone();
                     let opts = qi.options.as_ref().map(|os| {
                         os.iter().filter_map(|o| o.label.clone()).collect()
                     });
-                    Some((q, opts))
+                    let descs = qi.options.as_ref().map(|os| {
+                        os.iter().map(|o| o.description.clone().unwrap_or_default()).collect()
+                    });
+                    Some((q, hdr, opts, descs))
                 })
-                .unwrap_or((None, None));
+                .unwrap_or((None, None, None, None));
             let question = question_owned.as_deref();
-            let will_block = DANGEROUS_TOOLS.contains(&tool_name) && !is_auto_approved();
+            let question_header = header_owned.as_deref();
+
+            let _ = send_message(&SocketMessage {
+                r#type: "sessionStart",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::SessionStart {
+                    session_start: SessionStartPayload {
+                        task_name: None,
+                        working_directory: &cwd,
+                        terminal_app: detect_terminal(),
+                        terminal_pid: get_parent_pid(),
+                    },
+                },
+                session_mode,
+            });
+
+            let _ = send_message(&SocketMessage {
+                r#type: "preToolUse",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::PreToolUse {
+                    pre_tool_use: PreToolUsePayload {
+                        tool_name,
+                        file_path,
+                        input: command,
+                        diff_preview: diff.as_deref(),
+                        question,
+                        question_header,
+                        options: options_owned.as_deref(),
+                        option_descriptions: descriptions_owned.as_deref(),
+                    },
+                },
+                session_mode,
+            });
+        }
+
+        Commands::PermRequest => {
+            // Blocking path: show approval UI in BuddyNotch, wait for user decision.
+            // Responds with PermissionRequest hook output format.
+            let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
+
+            // Skip safe tools (except AskUserQuestion which we answer via the socket)
+            const SAFE_TOOLS: &[&str] = &["TaskCreate", "TaskUpdate", "TodoRead", "TodoWrite"];
+            if SAFE_TOOLS.contains(&tool_name) {
+                return;
+            }
+            let file_path = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.file_path.as_deref());
+            let command = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.command.as_deref());
+            let diff = hook.as_ref().and_then(|h| {
+                let ti = h.tool_input.as_ref()?;
+                // ExitPlanMode: use plan content as preview
+                if let Some(plan) = &ti.plan {
+                    return Some(plan.clone());
+                }
+                if let (Some(old), Some(new)) = (&ti.old_string, &ti.new_string) {
+                    build_rich_diff(ti.file_path.as_deref(), old, new)
+                } else {
+                    ti.diff.clone()
+                }
+            });
+            let permission_suggestions = hook.as_ref().and_then(|h| h.permission_suggestions.clone());
+            let can_remember = permission_suggestions.is_some();
 
             let session_start = SocketMessage {
                 r#type: "sessionStart",
@@ -140,40 +183,86 @@ fn main() {
                 session_mode,
             };
 
-            let pre_tool = SocketMessage {
-                r#type: "preToolUse",
+            let perm_request = SocketMessage {
+                r#type: "permissionRequest",
                 session_id: &session_id,
                 timestamp: &now_iso(),
-                payload: Payload::PreToolUse {
-                    pre_tool_use: PreToolUsePayload {
+                payload: Payload::PermissionRequest {
+                    permission_request: PermissionRequestPayload {
                         tool_name,
                         file_path,
                         input: command,
                         diff_preview: diff.as_deref(),
-                        question,
-                        options: options_owned.as_deref(),
-                        blocking: will_block,
+                        can_remember,
                     },
                 },
                 session_mode,
             };
 
-            if will_block {
-                // Blocking path: send both messages on one connection, wait for response
-                if let Some(resp) = send_and_wait(&session_start, &pre_tool) {
-                    if resp.action == "allow" {
-                        println!("{{\"decision\":\"allow\"}}");
-                    } else {
-                        println!("{{\"decision\":\"deny\",\"reason\":\"Denied via BuddyNotch\"}}");
+            if let Some(resp) = send_and_wait(&session_start, &perm_request) {
+                let output = if resp.action == "deny" {
+                    let msg = resp.feedback.clone().unwrap_or_else(|| "Denied via BuddyNotch".to_string());
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": {
+                                "behavior": "deny",
+                                "message": msg
+                            }
+                        }
+                    })
+                } else if resp.action == "acceptEdits" || resp.action == "bypassPermissions" {
+                    let mode = if resp.action == "acceptEdits" { "acceptEdits" } else { "bypassPermissions" };
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": {
+                                "behavior": "allow",
+                                "updatedPermissions": [
+                                    { "type": "setMode", "mode": mode, "destination": "session" }
+                                ]
+                            }
+                        }
+                    })
+                } else if resp.action == "allowAlways" {
+                    let mut decision = serde_json::json!({ "behavior": "allow" });
+                    if let Some(ref suggestions) = permission_suggestions {
+                        decision["updatedPermissions"] = suggestions.clone();
                     }
-                }
-                // If send_and_wait returns None (timeout/error), exit 0 with no output
-                // so Claude Code falls back to its own approval flow
-            } else {
-                // Fire-and-forget for safe tools and AskUserQuestion
-                let _ = send_message(&session_start);
-                let _ = send_message(&pre_tool);
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": decision
+                        }
+                    })
+                } else if resp.action == "answer" {
+                    // AskUserQuestion: return updatedInput with pre-filled answer
+                    let mut answers = serde_json::Map::new();
+                    if let (Some(q), Some(a)) = (&resp.question_text, &resp.answer_label) {
+                        answers.insert(q.clone(), serde_json::Value::String(a.clone()));
+                    }
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": {
+                                "behavior": "allow",
+                                "updatedInput": { "answers": answers }
+                            }
+                        }
+                    })
+                } else {
+                    // "allow"
+                    serde_json::json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PermissionRequest",
+                            "decision": { "behavior": "allow" }
+                        }
+                    })
+                };
+                println!("{}", output);
             }
+            // If send_and_wait returns None (timeout/error), exit 0 with no output
+            // so Claude Code falls back to its own permission prompt
         }
 
         Commands::PostTool => {
@@ -247,6 +336,35 @@ fn main() {
             });
         }
     }
+}
+
+/// Build a unified diff with real line numbers by reading the file and using `similar`.
+/// Falls back to simple `- old\n+ new` if the file can't be read.
+fn build_rich_diff(file_path: Option<&str>, old_str: &str, new_str: &str) -> Option<String> {
+    let path = file_path?;
+    let content = std::fs::read_to_string(path).ok()?;
+
+    // Build the full new file content by replacing old_string with new_string
+    let new_content = content.replacen(old_str, new_str, 1);
+    if new_content == content {
+        // old_string not found in file, fall back
+        return None;
+    }
+
+    let diff = similar::TextDiff::from_lines(&content, &new_content);
+    let unified = diff.unified_diff()
+        .context_radius(2)
+        .header("a", "b")
+        .to_string();
+
+    // Strip the --- a / +++ b header lines, keep only @@ hunks and content
+    let result: String = unified
+        .lines()
+        .filter(|l| !l.starts_with("---") && !l.starts_with("+++"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if result.is_empty() { None } else { Some(result) }
 }
 
 fn read_hook_input() -> Option<ClaudeHookInput> {
@@ -414,6 +532,10 @@ enum Payload<'a> {
         #[serde(rename = "postToolUse")]
         post_tool_use: PostToolUsePayload<'a>,
     },
+    PermissionRequest {
+        #[serde(rename = "permissionRequest")]
+        permission_request: PermissionRequestPayload<'a>,
+    },
     Notification {
         notification: NotificationPayload<'a>,
     },
@@ -448,9 +570,25 @@ struct PreToolUsePayload<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     question: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    question_header: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    option_descriptions: Option<&'a [String]>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PermissionRequestPayload<'a> {
+    tool_name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_path: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diff_preview: Option<&'a str>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
-    blocking: bool,
+    can_remember: bool,
 }
 
 #[derive(Serialize)]

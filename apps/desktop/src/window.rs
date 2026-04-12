@@ -20,9 +20,16 @@ pub fn expanded_frame(state: &str, geom: &NotchGeometry) -> (f64, f64, f64, f64)
             let (x, w, h) = compact_frame(geom);
             return (x, 0.0, w, h);
         }
-        "overview" => (geom.notch_width + 220.0, 360.0),
-        "approval" => (geom.notch_width + 220.0, 280.0),
-        "ask" => (geom.notch_width + 220.0, 340.0),
+        "alert" => {
+            // Wider compact to fit bell + session count
+            let w = geom.notch_width + COMPACT_SIDE_EXTENSION * 2.0 + 30.0;
+            let h = geom.notch_height;
+            let x = geom.center_x - w / 2.0;
+            return (x, 0.0, w, h);
+        }
+        "overview" => (geom.notch_width + 380.0, 420.0),
+        "approval" => (geom.notch_width + 380.0, 420.0),
+        "ask" => (geom.notch_width + 380.0, 420.0),
         _ => {
             let (x, w, h) = compact_frame(geom);
             return (x, 0.0, w, h);

@@ -7,7 +7,6 @@ const exec = promisify(execFile);
 
 const DEBOUNCE_MS = 50;
 const PANEL_RESET_DELAY_MS = 6000;
-const DANGEROUS_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"]);
 
 const CLAUDE_COLORS = ["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
 
@@ -38,6 +37,19 @@ export class SessionManager {
         heroId: this.heroSessionId,
       });
     }, DEBOUNCE_MS);
+  }
+
+  /** Emit sessionsUpdated immediately, bypassing debounce.
+   *  Used before panelStateChange for approval/ask to avoid race conditions. */
+  flushUpdate() {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    emit("sessionsUpdated", {
+      sessions: this.sessions,
+      heroId: this.heroSessionId,
+    });
   }
 
   handleMessage(msg: SocketMessage, clientFd: number) {
@@ -83,24 +95,47 @@ export class SessionManager {
           this.sessions[sessionId].status = "waitingAnswer";
           this.sessions[sessionId].pendingQuestion = {
             question: p.question,
+            header: p.questionHeader,
             options: p.options ?? [],
+            optionDescriptions: p.optionDescriptions,
             receivedAt: Date.now(),
           };
           this.heroSessionId = sessionId;
-          emit("panelStateChange", { state: "ask", sessionId });
-        } else if (DANGEROUS_TOOLS.has(p.toolName) && p.blocking) {
+          this.flushUpdate();
+          emit("panelStateChange", { state: "alert", sessionId });
+        } else {
+          this.sessions[sessionId].status = "active";
+        }
+        break;
+      }
+
+      case "permissionRequest": {
+        const p = payload.permissionRequest;
+        if (!p) break;
+        this.ensureSession(sessionId, timestamp);
+        this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
+        this.sessions[sessionId].currentTool = p.toolName;
+        this.sessions[sessionId].currentFilePath = p.filePath;
+        this.pendingApprovalClients[sessionId] = clientFd;
+        this.heroSessionId = sessionId;
+
+        // If session already has a pendingQuestion (from PreToolUse for AskUserQuestion),
+        // keep it — just store the clientFd so we can send the answer back through the socket.
+        if (this.sessions[sessionId].pendingQuestion) {
+          this.flushUpdate();
+          emit("panelStateChange", { state: "alert", sessionId });
+        } else {
           this.sessions[sessionId].status = "waitingApproval";
           this.sessions[sessionId].pendingApproval = {
             toolName: p.toolName,
             filePath: p.filePath,
             input: p.input,
             diffPreview: p.diffPreview,
+            canRemember: p.canRemember,
             receivedAt: Date.now(),
           };
-          this.heroSessionId = sessionId;
-          emit("panelStateChange", { state: "approval", sessionId });
-        } else {
-          this.sessions[sessionId].status = "active";
+          this.flushUpdate();
+          emit("panelStateChange", { state: "alert", sessionId });
         }
         break;
       }
@@ -170,11 +205,6 @@ export class SessionManager {
         }
         break;
       }
-    }
-
-    // Store clientFd for approval responses
-    if (type === "preToolUse") {
-      this.pendingApprovalClients[sessionId] = clientFd;
     }
 
     // Update session mode from hook event (plan mode is togglable mid-session)

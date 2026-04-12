@@ -22,13 +22,17 @@ export default function ApprovalView({ notchHeight }: Props) {
     close();
   };
 
+  const approveAlways = () => {
+    if (session) invoke("approve_session_always", { sessionId: session.id });
+    close();
+  };
+
   const deny = () => {
     if (session) invoke("deny_session", { sessionId: session.id });
     close();
   };
 
   if (!session || !approval) {
-    close();
     return null;
   }
 
@@ -93,19 +97,32 @@ export default function ApprovalView({ notchHeight }: Props) {
           ) : null;
         })()}
 
-      {/* Action buttons */}
-      <div className="flex gap-2.5">
-        <button
-          onClick={deny}
-          className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border-none bg-surface-hover py-2.5 text-[13px] font-medium text-white hover:bg-surface-active"
-        >
-          Deny <span className="font-mono text-[11px] text-text-dim">{"\u2318"}N</span>
-        </button>
+      {/* Action buttons — matches Claude Code's permission options */}
+      <div className="flex flex-col gap-1.5">
         <button
           onClick={approve}
-          className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border-none bg-white/90 py-2.5 text-[13px] font-semibold text-black hover:bg-white"
+          className="flex w-full cursor-pointer items-center gap-2 rounded-[10px] border-none bg-white/90 px-3 py-2.5 text-left text-[13px] font-semibold text-black hover:bg-white"
         >
-          Allow <span className="font-mono text-[11px] text-black/50">{"\u2318"}Y</span>
+          <span className="w-5 shrink-0 font-mono text-[11px] font-bold text-black/40">1.</span>
+          Yes
+        </button>
+        {approval.canRemember && (
+          <button
+            onClick={approveAlways}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-[10px] border-none bg-surface-hover px-3 py-2.5 text-left text-[13px] font-medium text-white hover:bg-surface-active"
+          >
+            <span className="w-5 shrink-0 font-mono text-[11px] font-bold text-text-dim">2.</span>
+            Yes, and don't ask again
+          </button>
+        )}
+        <button
+          onClick={deny}
+          className="flex w-full cursor-pointer items-center gap-2 rounded-[10px] border-none bg-surface-hover px-3 py-2.5 text-left text-[13px] font-medium text-white hover:bg-surface-active"
+        >
+          <span className="w-5 shrink-0 font-mono text-[11px] font-bold text-text-dim">
+            {approval.canRemember ? "3." : "2."}
+          </span>
+          No
         </button>
       </div>
     </div>

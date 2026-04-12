@@ -16,6 +16,8 @@ pub struct ClaudeHookInput {
     pub cwd: Option<String>,
     #[serde(rename = "session_type")]
     pub session_type: Option<String>,
+    #[serde(rename = "permission_suggestions")]
+    pub permission_suggestions: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -33,17 +35,20 @@ pub struct ToolInput {
     pub question: Option<String>,
     pub options: Option<Vec<String>>,
     pub questions: Option<Vec<QuestionItem>>,
+    pub plan: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct QuestionItem {
     pub question: Option<String>,
+    pub header: Option<String>,
     pub options: Option<Vec<OptionItem>>,
 }
 
 #[derive(Deserialize)]
 pub struct OptionItem {
     pub label: Option<String>,
+    pub description: Option<String>,
 }
 
 #[derive(Deserialize)]

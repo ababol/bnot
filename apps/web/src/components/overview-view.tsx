@@ -14,10 +14,17 @@ export default function OverviewView({ notchHeight }: Props) {
   const { state, dispatch } = useSession();
   const sessions = state.sessions;
   const history = state.history;
-  const sortedSessions = Object.values(sessions).sort((a, b) =>
-    a.workingDirectory.localeCompare(b.workingDirectory),
+  const sortedSessions = Object.values(sessions).sort((a, b) => {
+    // Approval/question sessions first
+    const aPriority = a.status === "waitingApproval" || a.status === "waitingAnswer" ? 0 : 1;
+    const bPriority = b.status === "waitingApproval" || b.status === "waitingAnswer" ? 0 : 1;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    return a.workingDirectory.localeCompare(b.workingDirectory);
+  });
+  const prioritySession = sortedSessions.find(
+    (s) => s.status === "waitingApproval" || s.status === "waitingAnswer",
   );
-  const heroId = state.heroSessionId ?? sortedSessions[0]?.id ?? null;
+  const heroId = prioritySession?.id ?? state.heroSessionId ?? sortedSessions[0]?.id ?? null;
   const buddyColor = buddyColorFromSessions(sessions);
 
   const close = () => setPanelState(dispatch, "compact");

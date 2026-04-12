@@ -21,8 +21,12 @@ pub fn run() {
             commands::navigate_pane,
             commands::activate_app,
             commands::jump_to_session,
+            commands::answer_question,
             commands::approve_session,
+            commands::approve_session_always,
             commands::deny_session,
+            commands::accept_edits_session,
+            commands::bypass_permissions_session,
             commands::resume_session,
         ])
         .setup(|app| {
