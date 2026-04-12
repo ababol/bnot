@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
+import { isSoundEnabled, setSoundEnabled } from "../lib/sound";
 
 interface Props {
   onAction?: () => void;
@@ -10,6 +11,7 @@ interface Props {
  *  edit the JSON config, toggle "Launch at login". */
 export default function SettingsMenu({ onAction }: Props) {
   const [autostartOn, setAutostartOn] = useState<boolean | null>(null);
+  const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
 
   useEffect(() => {
     isEnabled()
@@ -36,6 +38,12 @@ export default function SettingsMenu({ onAction }: Props) {
     }
   };
 
+  const handleToggleSound = () => {
+    const next = !soundOn;
+    setSoundEnabled(next);
+    setSoundOn(next);
+  };
+
   const handleQuit = () => {
     invoke("quit_app");
     onAction?.();
@@ -56,6 +64,13 @@ export default function SettingsMenu({ onAction }: Props) {
       >
         <span className="w-3 text-text-dim">{autostartOn ? "\u2713" : ""}</span>
         <span>Launch at login</span>
+      </button>
+      <button
+        onClick={handleToggleSound}
+        className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-text-secondary hover:bg-white/10"
+      >
+        <span className="w-3 text-text-dim">{soundOn ? "\u2713" : ""}</span>
+        <span>Enable sound</span>
       </button>
       <div className="my-1 h-px bg-white/10" />
       <button

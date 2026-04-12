@@ -3,6 +3,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect, useRef } from "react";
 import type { SessionAction } from "../context/session-context";
 import type { AgentSession, HistorySession, PanelState } from "../context/types";
+import { playSound } from "../lib/sound";
 import { collapsePanel, setPanelState } from "../lib/tauri";
 
 interface SessionsUpdatedPayload {
@@ -25,11 +26,24 @@ export function useTauriEvents(
 ) {
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const hasHydratedRef = useRef(false);
 
   useEffect(() => {
     const unlisten: Array<() => void> = [];
 
     listen<SessionsUpdatedPayload>("sessionsUpdated", (event) => {
+      if (hasHydratedRef.current) {
+        const prev = sessionsRef.current;
+        for (const [id, next] of Object.entries(event.payload.sessions)) {
+          const before = prev[id];
+          if (before && before.status !== "completed" && next.status === "completed") {
+            playSound("/done.mp3");
+            break;
+          }
+        }
+      } else {
+        hasHydratedRef.current = true;
+      }
       dispatch({
         type: "UPDATE_SESSIONS",
         sessions: event.payload.sessions,
@@ -41,7 +55,7 @@ export function useTauriEvents(
       const raw = event.payload.state;
       if (typeof raw !== "string" || !VALID_PANEL_STATES.has(raw)) return;
       if (raw === "alert") {
-        new Audio("/alert.mp3").play().catch(() => {});
+        playSound("/alert.mp3");
       }
       setPanelState(dispatch, raw as PanelState);
     }).then((u) => unlisten.push(u));
