@@ -99,6 +99,7 @@ export class SessionManager {
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].currentTool = p.toolName;
         this.sessions[sessionId].currentFilePath = p.filePath;
+        this.sessions[sessionId].isThinking = true;
 
         if (p.toolName === "AskUserQuestion" && p.question) {
           this.sessions[sessionId].status = "waitingAnswer";
@@ -125,6 +126,7 @@ export class SessionManager {
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].currentTool = p.toolName;
         this.sessions[sessionId].currentFilePath = p.filePath;
+        this.sessions[sessionId].isThinking = true;
         this.pendingApprovalClients[sessionId] = clientFd;
         this.heroSessionId = sessionId;
 

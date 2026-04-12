@@ -104,8 +104,6 @@ export interface HistorySession {
 
 // Derived helpers
 
-const ACTIVITY_RECENCY_MS = 2_000;
-
 export function contextPercent(s: AgentSession): number {
   if (s.maxContextTokens <= 0) return 0;
   return Math.min(s.contextTokens / s.maxContextTokens, 1.0);
@@ -115,11 +113,8 @@ export function directoryName(s: AgentSession): string {
   return s.workingDirectory.split("/").pop() ?? s.workingDirectory;
 }
 
-export function isWorking(s: AgentSession, now: number): boolean {
-  return (
-    s.status === "active" &&
-    (s.currentTool != null || s.isThinking === true || now - s.lastActivity < ACTIVITY_RECENCY_MS)
-  );
+export function isWorking(s: AgentSession, _now: number): boolean {
+  return s.status === "active" && (s.currentTool != null || s.isThinking === true);
 }
 
 export function isIdle(s: AgentSession, now: number): boolean {
