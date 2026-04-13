@@ -52,11 +52,16 @@ export interface ApprovalRequest {
   receivedAt: number;
 }
 
-export interface QuestionRequest {
+export interface QuestionItem {
   question: string;
   header?: string;
   options: string[];
   optionDescriptions?: string[];
+  multiSelect?: boolean;
+}
+
+export interface QuestionRequest extends QuestionItem {
+  allQuestions?: QuestionItem[];
   receivedAt: number;
 }
 

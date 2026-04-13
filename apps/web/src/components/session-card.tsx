@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "../context/session-context";
-import type { AgentSession } from "../context/types";
+import type { AgentSession, QuestionItem } from "../context/types";
 import {
   contextPercent,
   directoryName,
@@ -55,6 +55,30 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
   const approval = session.pendingApproval;
   const question = session.pendingQuestion;
 
+  // Multi-select / multi-question answer state.
+  // Keys are question indices (0-based); values are sets of selected option indices.
+  const [selectedMap, setSelectedMap] = useState<Record<number, Set<number>>>({});
+  // Step-by-step: which question we're currently showing (for multi-question flows).
+  const [currentQIdx, setCurrentQIdx] = useState(0);
+  // Reset selection only when a genuinely NEW question arrives (different receivedAt).
+  // Do NOT compare by object reference — sessionsUpdated recreates objects on every
+  // heartbeat, which would wipe the user's in-progress selection on each re-render.
+  const prevQuestionKeyRef = useRef<number | undefined>(undefined);
+  const questionKey = question?.receivedAt;
+  if (prevQuestionKeyRef.current !== questionKey) {
+    prevQuestionKeyRef.current = questionKey;
+    if (Object.keys(selectedMap).length > 0) setSelectedMap({});
+    if (currentQIdx !== 0) setCurrentQIdx(0);
+  }
+
+  const allQs: QuestionItem[] = question
+    ? question.allQuestions ?? [question]
+    : [];
+
+  const isSingleSelectSingle = allQs.length === 1 && !allQs[0]?.multiSelect;
+  const currentQ = allQs[currentQIdx];
+  const isLastQuestion = currentQIdx === allQs.length - 1;
+
   const runAction = (cmd: string, extra?: Record<string, unknown>) => {
     invoke(cmd, { sessionId: session.id, ...extra });
     collapseAfterAction();
@@ -65,25 +89,78 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
       runAction(cmd, extra);
     };
 
-  const selectOption = (index: number) => runAction("answer_question", { optionIndex: index });
-
-  const handleOptionClick = (e: React.MouseEvent, index: number) => {
-    e.stopPropagation();
-    selectOption(index);
+  /** Build the answers dict from current selection and invoke answer_question. */
+  const submitAnswers = (overrideMap?: Record<number, Set<number>>) => {
+    const map = overrideMap ?? selectedMap;
+    const answers: Record<string, string | string[]> = {};
+    allQs.forEach((q, qi) => {
+      const sel = map[qi];
+      if (!sel || sel.size === 0) return;
+      const labels = [...sel].map((i) => q.options[i]).filter(Boolean) as string[];
+      answers[q.question] = q.multiSelect ? labels : (labels[0] ?? "");
+    });
+    runAction("answer_question", { answers });
   };
 
-  // Keyboard shortcuts: press 1-9 to select an option
+  /**
+   * Single-click handler for single-select questions.
+   * - Single-question: submit immediately.
+   * - Multi-question: store and auto-advance to next question (submit on last).
+   */
+  const handleSingleSelect = (qi: number, optIdx: number) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newMap = { ...selectedMap, [qi]: new Set([optIdx]) };
+    setSelectedMap(newMap);
+    if (isSingleSelectSingle) {
+      // Single question single-select → immediate submit
+      submitAnswers(newMap);
+    } else if (!isLastQuestion) {
+      // Multi-question: advance to next step
+      setCurrentQIdx(qi + 1);
+    } else {
+      // Last question: submit all accumulated answers
+      submitAnswers(newMap);
+    }
+  };
+
+  /** Toggle handler for multi-select checkboxes (doesn't submit immediately). */
+  const handleToggle = (qi: number, optIdx: number) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedMap((prev) => {
+      const set = new Set(prev[qi] ?? []);
+      if (set.has(optIdx)) set.delete(optIdx);
+      else set.add(optIdx);
+      return { ...prev, [qi]: set };
+    });
+  };
+
+  /** Advance to next question or submit if on the last one. */
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isLastQuestion) {
+      setCurrentQIdx(currentQIdx + 1);
+    } else {
+      submitAnswers();
+    }
+  };
+
+  /** Current question has ≥1 selection (enables Next/Submit button for multi-select). */
+  const currentAnswered = (selectedMap[currentQIdx]?.size ?? 0) > 0;
+
+  // Keyboard shortcut: 1-9 picks option for single-question single-select only.
   useEffect(() => {
-    if (!question || question.options.length === 0) return;
+    if (!question || !isSingleSelectSingle || !currentQ || currentQ.options.length === 0) return;
+    const opts = currentQ.options;
     const handler = (e: KeyboardEvent) => {
       const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= question.options.length) {
-        selectOption(num - 1);
+      if (num >= 1 && num <= opts.length) {
+        const map = { 0: new Set([num - 1]) };
+        submitAnswers(map);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [question]);
+  }, [question, isSingleSelectSingle, currentQ]);
 
   const handleApprove = runActionOnClick("approve_session");
   const handleApproveAlways = runActionOnClick("approve_session_always");
@@ -196,45 +273,105 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
           </div>
         </div>
       ) : question ? (
-        /* Inline question UI */
-        <div className="mt-1.5">
-          {/* Header */}
+        /* Inline question UI — step-by-step for multi-question, single/multi-select */
+        <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+          {/* Header with step indicator */}
           <div className="mb-1.5 flex items-center gap-1.5">
             <span className="text-[11px]">{"\uD83D\uDCAC"}</span>
             <span className="text-[11px] font-semibold text-bnot-cyan">Claude's Question</span>
-          </div>
-
-          {/* Question header tag + text */}
-          <div className="mb-2 text-[12px] text-white/90">
-            {question.header && (
-              <span className="mr-1.5 font-semibold text-bnot-cyan">[{question.header}]</span>
+            {allQs.length > 1 && (
+              <span className="ml-auto text-[10px] text-white/40">
+                {currentQIdx + 1}/{allQs.length}
+              </span>
             )}
-            {question.question}
           </div>
 
-          {/* Options */}
-          <div className="flex flex-col gap-1.5">
-            {question.options.map((option, i) => (
-              <button
-                key={option}
-                onClick={(e) => handleOptionClick(e, i)}
-                className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-bnot-cyan/10 px-3 py-2.5 text-left hover:bg-bnot-cyan/20"
-              >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-bnot-cyan/30 text-[10px] font-bold text-bnot-cyan">
-                  {i + 1}
-                </span>
-                <div className="flex-1">
-                  <div className="text-[12px] font-medium text-white">{option}</div>
-                  {question.optionDescriptions?.[i] && (
-                    <div className="text-[10px] text-white/50">
-                      {question.optionDescriptions[i]}
-                    </div>
-                  )}
-                </div>
-                <span className="text-[11px] text-white/30">{"\u203A"}</span>
-              </button>
-            ))}
-          </div>
+          {currentQ && (
+            <div>
+              {/* Question text */}
+              <div className="mb-2 text-[12px] text-white/90">
+                {currentQ.header && (
+                  <span className="mr-1.5 font-semibold text-bnot-cyan">[{currentQ.header}]</span>
+                )}
+                {currentQ.question}
+                {currentQ.multiSelect && (
+                  <span className="ml-1.5 text-[10px] text-white/40">select all that apply</span>
+                )}
+              </div>
+
+              {/* Options */}
+              <div className="flex flex-col gap-1.5">
+                {(() => {
+                  const selected = selectedMap[currentQIdx];
+                  return currentQ.options.map((option, i) => {
+                  const isSelected = selected?.has(i) ?? false;
+                  if (currentQ.multiSelect) {
+                    return (
+                      <button
+                        key={option}
+                        onClick={handleToggle(currentQIdx, i)}
+                        className={`flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none px-3 py-2.5 text-left transition-colors ${
+                          isSelected
+                            ? "bg-bnot-cyan/25 hover:bg-bnot-cyan/30"
+                            : "bg-bnot-cyan/10 hover:bg-bnot-cyan/20"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] transition-colors ${
+                            isSelected
+                              ? "border-bnot-cyan bg-bnot-cyan text-black"
+                              : "border-bnot-cyan/40 bg-transparent text-transparent"
+                          }`}
+                        >
+                          ✓
+                        </span>
+                        <div className="flex-1">
+                          <div className="text-[12px] font-medium text-white">{option}</div>
+                          {currentQ.optionDescriptions?.[i] && (
+                            <div className="text-[10px] text-white/50">
+                              {currentQ.optionDescriptions[i]}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  }
+                  return (
+                    <button
+                      key={option}
+                      onClick={handleSingleSelect(currentQIdx, i)}
+                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-bnot-cyan/10 px-3 py-2.5 text-left hover:bg-bnot-cyan/20"
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-bnot-cyan/30 text-[10px] font-bold text-bnot-cyan">
+                        {isSingleSelectSingle ? i + 1 : "›"}
+                      </span>
+                      <div className="flex-1">
+                        <div className="text-[12px] font-medium text-white">{option}</div>
+                        {currentQ.optionDescriptions?.[i] && (
+                          <div className="text-[10px] text-white/50">
+                            {currentQ.optionDescriptions[i]}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-white/30">{"\u203A"}</span>
+                    </button>
+                  );
+                });
+                })()}
+              </div>
+
+              {/* Next/Submit button — shown for multi-select steps */}
+              {currentQ.multiSelect && (
+                <button
+                  onClick={handleNext}
+                  disabled={!currentAnswered}
+                  className="mt-3 w-full cursor-pointer rounded-lg border-none bg-white py-2 text-[12px] font-semibold text-black transition-opacity hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  {isLastQuestion ? "Submit" : "Next"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : isHero ? (
         /* Hero details (non-approval) */

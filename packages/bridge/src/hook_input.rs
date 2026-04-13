@@ -43,6 +43,8 @@ pub struct QuestionItem {
     pub question: Option<String>,
     pub header: Option<String>,
     pub options: Option<Vec<OptionItem>>,
+    #[serde(rename = "multiSelect")]
+    pub multi_select: Option<bool>,
 }
 
 #[derive(Deserialize)]

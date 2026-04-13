@@ -18,6 +18,8 @@ struct ApprovalResponse {
     answer_label: Option<String>,
     #[serde(rename = "questionText")]
     question_text: Option<String>,
+    /// New format: {questionText: label | [labels, ...]} for multi-select / multi-question
+    answers: Option<serde_json::Value>,
     feedback: Option<String>,
 }
 
@@ -143,27 +145,93 @@ fn main() {
             let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
             let file_path = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.file_path.as_deref());
             let command = hook.as_ref().and_then(|h| h.tool_input.as_ref()?.command.as_deref());
-            let (question_owned, header_owned, options_owned, descriptions_owned) = hook
+
+            // Build question fields: prefer simple `question` field; otherwise use `questions` array.
+            // When `questions` has multiple items, send the full array so the UI can show all of them.
+            struct QuestionFields {
+                question: Option<String>,
+                header: Option<String>,
+                options: Option<Vec<String>>,
+                option_descriptions: Option<Vec<String>>,
+                multi_select: Option<bool>,
+                all_questions: Option<Vec<QuestionPayload>>,
+            }
+
+            let qf = hook
                 .as_ref()
                 .and_then(|h| {
                     let ti = h.tool_input.as_ref()?;
-                    if ti.question.is_some() {
-                        return Some((ti.question.clone(), None::<String>, ti.options.clone(), None::<Vec<String>>));
+                    // Check the `questions` array FIRST — Claude Code populates both
+                    // `question` (from Q1) and `questions` (full array), so checking
+                    // `question` first would short-circuit and lose the other questions.
+                    if let Some(questions) = ti.questions.as_ref() {
+                        if !questions.is_empty() {
+                            let all: Vec<QuestionPayload> = questions
+                                .iter()
+                                .filter_map(|qi| {
+                                    let q_text = qi.question.clone()?;
+                                    let opts: Vec<String> = qi
+                                        .options
+                                        .as_ref()
+                                        .map(|os| os.iter().filter_map(|o| o.label.clone()).collect())
+                                        .unwrap_or_default();
+                                    let descs: Option<Vec<String>> = qi.options.as_ref().map(|os| {
+                                        os.iter().map(|o| o.description.clone().unwrap_or_default()).collect()
+                                    });
+                                    Some(QuestionPayload {
+                                        question: q_text,
+                                        question_header: qi.header.clone(),
+                                        options: opts,
+                                        option_descriptions: descs,
+                                        multi_select: qi.multi_select,
+                                    })
+                                })
+                                .collect();
+                            let first = questions.first()?;
+                            let q_text = first.question.clone();
+                            let hdr = first.header.clone();
+                            let opts = first.options.as_ref().map(|os| {
+                                os.iter().filter_map(|o| o.label.clone()).collect()
+                            });
+                            let descs = first.options.as_ref().map(|os| {
+                                os.iter().map(|o| o.description.clone().unwrap_or_default()).collect()
+                            });
+                            let ms = first.multi_select;
+                            let has_multiple = all.len() > 1;
+                            return Some(QuestionFields {
+                                question: q_text,
+                                header: hdr,
+                                options: opts,
+                                option_descriptions: descs,
+                                multi_select: ms,
+                                all_questions: if has_multiple { Some(all) } else { None },
+                            });
+                        }
                     }
-                    let qi = ti.questions.as_ref()?.first()?;
-                    let q = qi.question.clone();
-                    let hdr = qi.header.clone();
-                    let opts = qi.options.as_ref().map(|os| {
-                        os.iter().filter_map(|o| o.label.clone()).collect()
-                    });
-                    let descs = qi.options.as_ref().map(|os| {
-                        os.iter().map(|o| o.description.clone().unwrap_or_default()).collect()
-                    });
-                    Some((q, hdr, opts, descs))
+                    // Fallback: simple single-question format
+                    if let Some(q) = &ti.question {
+                        return Some(QuestionFields {
+                            question: Some(q.clone()),
+                            header: None,
+                            options: ti.options.clone(),
+                            option_descriptions: None,
+                            multi_select: None,
+                            all_questions: None,
+                        });
+                    }
+                    None
                 })
-                .unwrap_or((None, None, None, None));
-            let question = question_owned.as_deref();
-            let question_header = header_owned.as_deref();
+                .unwrap_or(QuestionFields {
+                    question: None,
+                    header: None,
+                    options: None,
+                    option_descriptions: None,
+                    multi_select: None,
+                    all_questions: None,
+                });
+
+            let question = qf.question.as_deref();
+            let question_header = qf.header.as_deref();
 
             send_with_preamble(&SocketMessage {
                 r#type: "preToolUse",
@@ -177,8 +245,10 @@ fn main() {
                         diff_preview: diff.as_deref(),
                         question,
                         question_header,
-                        options: options_owned.as_deref(),
-                        option_descriptions: descriptions_owned.as_deref(),
+                        options: qf.options.as_deref(),
+                        option_descriptions: qf.option_descriptions.as_deref(),
+                        multi_select: qf.multi_select,
+                        questions: qf.all_questions,
                     },
                 },
                 session_mode,
@@ -281,17 +351,24 @@ fn main() {
                         }
                     })
                 } else if resp.action == "answer" {
-                    // AskUserQuestion: return updatedInput with pre-filled answer
-                    let mut answers = serde_json::Map::new();
-                    if let (Some(q), Some(a)) = (&resp.question_text, &resp.answer_label) {
-                        answers.insert(q.clone(), serde_json::Value::String(a.clone()));
-                    }
+                    // AskUserQuestion: return updatedInput with pre-filled answers.
+                    // Prefer the new `answers` dict (multi-question / multi-select);
+                    // fall back to the legacy single question_text → answer_label pair.
+                    let answers_value = if let Some(a) = resp.answers {
+                        a
+                    } else {
+                        let mut m = serde_json::Map::new();
+                        if let (Some(q), Some(a)) = (&resp.question_text, &resp.answer_label) {
+                            m.insert(q.clone(), serde_json::Value::String(a.clone()));
+                        }
+                        serde_json::Value::Object(m)
+                    };
                     serde_json::json!({
                         "hookSpecificOutput": {
                             "hookEventName": "PermissionRequest",
                             "decision": {
                                 "behavior": "allow",
-                                "updatedInput": { "answers": answers }
+                                "updatedInput": { "answers": answers_value }
                             }
                         }
                     })
@@ -638,6 +715,19 @@ struct SessionStartPayload<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct QuestionPayload {
+    question: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    question_header: Option<String>,
+    options: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    option_descriptions: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    multi_select: Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct PreToolUsePayload<'a> {
     tool_name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -654,6 +744,10 @@ struct PreToolUsePayload<'a> {
     options: Option<&'a [String]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     option_descriptions: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    multi_select: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    questions: Option<Vec<QuestionPayload>>,
 }
 
 #[derive(Serialize)]

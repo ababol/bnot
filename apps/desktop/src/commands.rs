@@ -39,11 +39,11 @@ pub fn jump_to_session<R: Runtime>(app: AppHandle<R>, session_id: String) {
 }
 
 #[command]
-pub fn answer_question<R: Runtime>(app: AppHandle<R>, session_id: String, option_index: u32) {
+pub fn answer_question<R: Runtime>(app: AppHandle<R>, session_id: String, answers: serde_json::Value) {
     let sidecar = app.state::<crate::sidecar::SidecarManager>();
     sidecar.send_request(
         "answerQuestion",
-        serde_json::json!({ "sessionId": session_id, "optionIndex": option_index }),
+        serde_json::json!({ "sessionId": session_id, "answers": answers }),
     );
 }
 

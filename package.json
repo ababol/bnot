@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "cargo build -p bnot-bridge --release && tauri dev",
-    "build": "cargo build -p bnot-bridge --release && tauri build",
+    "build": "pnpm --filter bnot-sidecar build && cargo build -p bnot-bridge --release && tauri build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

@@ -77,18 +77,12 @@ onRequest(async (method, params) => {
 
     case "answerQuestion": {
       const sessionId = requireParam(params, "sessionId");
-      const optionIndex = typeof params?.optionIndex === "number" ? params.optionIndex : 0;
+      const answers = params?.answers as Record<string, string | string[]> | undefined;
       const session = sessionManager.sessions[sessionId];
       if (session?.pendingQuestion) {
-        const q = session.pendingQuestion;
-        const label = q.options[optionIndex] ?? q.options[0] ?? "";
         const clientFd = sessionManager.pendingApprovalClients[sessionId];
         if (clientFd !== undefined) {
-          // Non-auto mode: answer through the socket to the waiting bridge
-          socketServer.sendResponse(
-            { action: "answer", answerLabel: label, questionText: q.question } as never,
-            clientFd,
-          );
+          socketServer.sendResponse({ action: "answer", answers } as never, clientFd);
         }
         session.pendingQuestion = undefined;
         sessionManager.setStatus(sessionId, "active");

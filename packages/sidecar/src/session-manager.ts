@@ -119,13 +119,25 @@ export class SessionManager {
         this.sessions[sessionId].currentFilePath = p.filePath;
         this.sessions[sessionId].isThinking = true;
 
-        if (p.toolName === "AskUserQuestion" && p.question) {
+        if (p.toolName === "AskUserQuestion" && (p.question || p.questions?.length)) {
           this.setStatus(sessionId, "waitingAnswer");
+          const firstQ = p.questions?.[0];
           this.sessions[sessionId].pendingQuestion = {
-            question: p.question,
-            header: p.questionHeader,
-            options: p.options ?? [],
-            optionDescriptions: p.optionDescriptions,
+            question: p.question ?? firstQ?.question ?? "",
+            header: p.questionHeader ?? firstQ?.questionHeader,
+            options: p.options ?? firstQ?.options ?? [],
+            optionDescriptions: p.optionDescriptions ?? firstQ?.optionDescriptions,
+            multiSelect: p.multiSelect ?? firstQ?.multiSelect,
+            allQuestions:
+              p.questions && p.questions.length > 1
+                ? p.questions.map((q) => ({
+                    question: q.question,
+                    header: q.questionHeader,
+                    options: q.options ?? [],
+                    optionDescriptions: q.optionDescriptions,
+                    multiSelect: q.multiSelect,
+                  }))
+                : undefined,
             receivedAt: Date.now(),
           };
           this.heroSessionId = sessionId;
@@ -262,14 +274,16 @@ export class SessionManager {
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].currentTool = undefined;
         this.sessions[sessionId].pendingApproval = undefined;
+        this.sessions[sessionId].pendingQuestion = undefined;
         delete this.pendingApprovalClients[sessionId];
         break;
       }
 
       case "permissionDenied": {
         if (this.sessions[sessionId]) {
-          this.setStatus(sessionId, "completed");
+          this.setStatus(sessionId, "active");
           this.sessions[sessionId].pendingApproval = undefined;
+          this.sessions[sessionId].pendingQuestion = undefined;
           this.sessions[sessionId].isThinking = false;
         }
         delete this.pendingApprovalClients[sessionId];

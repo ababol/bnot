@@ -47,6 +47,14 @@ export interface UserPromptSubmitPayload {
   prompt?: string;
 }
 
+export interface QuestionItem {
+  question: string;
+  questionHeader?: string;
+  options: string[];
+  optionDescriptions?: string[];
+  multiSelect?: boolean;
+}
+
 export interface PreToolUsePayload {
   toolName: string;
   filePath?: string;
@@ -56,6 +64,8 @@ export interface PreToolUsePayload {
   questionHeader?: string;
   options?: string[];
   optionDescriptions?: string[];
+  multiSelect?: boolean;
+  questions?: QuestionItem[];
 }
 
 export interface PermissionRequestPayload {
@@ -130,6 +140,14 @@ export interface AgentSession {
     header?: string;
     options: string[];
     optionDescriptions?: string[];
+    multiSelect?: boolean;
+    allQuestions?: {
+      question: string;
+      header?: string;
+      options: string[];
+      optionDescriptions?: string[];
+      multiSelect?: boolean;
+    }[];
     receivedAt: number;
   };
   contextTokens: number;
