@@ -13,6 +13,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Take the version from the release tag (e.g. `v0.1.2` → `0.1.2`) and
+      # write it into the files that name the built artifacts. Changes stay in
+      # the runner's checkout — they are not committed back to main.
+      - name: Sync versions to release tag
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Release tag '$TAG' is not a semver version"
+            exit 1
+          fi
+          echo "Bumping tauri.conf.json and Cargo.toml to $VERSION"
+
+          node -e "const f='apps/desktop/tauri.conf.json'; const fs=require('fs'); const j=JSON.parse(fs.readFileSync(f,'utf8')); j.version=process.argv[1]; fs.writeFileSync(f, JSON.stringify(j,null,2)+'\n');" "$VERSION"
+
+          sed -i.bak -E '/^\[package\]/,/^\[/ s/^version = "[^"]+"$/version = "'"$VERSION"'"/' apps/desktop/Cargo.toml
+          rm apps/desktop/Cargo.toml.bak
+
       - uses: pnpm/action-setup@v4
         with:
           version: 9
