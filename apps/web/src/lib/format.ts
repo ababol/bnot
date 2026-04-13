@@ -37,6 +37,17 @@ export function shortenPath(p: string): string {
   return parts.length > 2 ? parts.slice(-2).join("/") : p;
 }
 
+export function formatTimeUntil(ms: number): string {
+  const diff = ms - Date.now();
+  if (diff <= 0) return "now";
+  const min = Math.floor(diff / 60000);
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const rm = min % 60;
+  if (rm === 0) return `${h}h`;
+  return `${h}h ${rm}m`;
+}
+
 export function tokenShort(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
   if (tokens >= 1_000) return `${Math.floor(tokens / 1_000)}K`;

@@ -1,11 +1,13 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from "react";
-import type { AgentSession, HistorySession, PanelState } from "./types";
+import type { AgentSession, HistorySession, HookHealthReport, PanelState, UsageSnapshot } from "./types";
 
 interface SessionState {
   sessions: Record<string, AgentSession>;
   heroSessionId: string | null;
   panelState: PanelState;
   history: HistorySession[];
+  hookHealth: HookHealthReport | null;
+  usageStats: UsageSnapshot | null;
 }
 
 export type SessionAction =
@@ -15,13 +17,17 @@ export type SessionAction =
       heroId: string | null;
     }
   | { type: "SET_PANEL_STATE"; panelState: PanelState }
-  | { type: "UPDATE_HISTORY"; history: HistorySession[] };
+  | { type: "UPDATE_HISTORY"; history: HistorySession[] }
+  | { type: "SET_HOOK_HEALTH"; hookHealth: HookHealthReport }
+  | { type: "SET_USAGE_STATS"; usageStats: UsageSnapshot };
 
 const initialState: SessionState = {
   sessions: {},
   heroSessionId: null,
   panelState: "compact",
   history: [],
+  hookHealth: null,
+  usageStats: null,
 };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -36,6 +42,10 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       return { ...state, panelState: action.panelState };
     case "UPDATE_HISTORY":
       return { ...state, history: action.history };
+    case "SET_HOOK_HEALTH":
+      return { ...state, hookHealth: action.hookHealth };
+    case "SET_USAGE_STATS":
+      return { ...state, usageStats: action.usageStats };
     default:
       return action satisfies never;
   }

@@ -30,6 +30,8 @@ pub fn run() {
             commands::resume_session,
             commands::open_settings,
             commands::quit_app,
+            commands::get_hook_health,
+            commands::repair_hooks,
         ])
         .setup(|app| {
             let win = app.get_webview_window("main").expect("main window");

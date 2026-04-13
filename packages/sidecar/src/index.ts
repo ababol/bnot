@@ -1,7 +1,12 @@
 import { ContextScanner } from "./context-scanner.js";
 import { GhosttyFocusWatcher } from "./ghostty-focus-watcher.js";
 import { HistoryScanner } from "./history-scanner.js";
-import { installHooksIfNeeded } from "./hook-installer.js";
+import {
+  checkHookHealth,
+  installHooksIfNeeded,
+  installStatusLineIfNeeded,
+  repairHooks,
+} from "./hook-installer.js";
 import { emit, onRequest } from "./ipc.js";
 import { ProcessScanner } from "./process-scanner.js";
 import { RepoFinder } from "./repo-finder.js";
@@ -9,6 +14,7 @@ import { resumeSession } from "./session-launcher.js";
 import { SessionManager } from "./session-manager.js";
 import { SocketServer } from "./socket-server.js";
 import { jumpToSession } from "./terminal-jumper.js";
+import { UsageWatcher } from "./usage-watcher.js";
 import { WorktreeCreator } from "./worktree-creator.js";
 
 function requireParam(params: Record<string, unknown> | undefined, key: string): string {
@@ -31,7 +37,7 @@ function resolveApproval(
     socketServer.sendResponse({ action, feedback }, clientFd);
     if (sessionManager.sessions[sessionId]) {
       sessionManager.sessions[sessionId].pendingApproval = undefined;
-      sessionManager.sessions[sessionId].status = "active";
+      sessionManager.setStatus(sessionId, "active");
     }
     delete sessionManager.pendingApprovalClients[sessionId];
     emit("panelStateChange", { state: "compact" });
@@ -42,6 +48,7 @@ function resolveApproval(
 const sessionManager = new SessionManager();
 const repoFinder = new RepoFinder();
 const worktreeCreator = new WorktreeCreator(repoFinder, sessionManager);
+const usageWatcher = new UsageWatcher();
 const socketServer = new SocketServer((msg, clientFd) => {
   sessionManager.handleMessage(msg, clientFd);
 });
@@ -75,19 +82,19 @@ onRequest(async (method, params) => {
       if (session?.pendingQuestion) {
         const q = session.pendingQuestion;
         const label = q.options[optionIndex] ?? q.options[0] ?? "";
-        // Send answer through the socket to the waiting bridge
         const clientFd = sessionManager.pendingApprovalClients[sessionId];
         if (clientFd !== undefined) {
+          // Non-auto mode: answer through the socket to the waiting bridge
           socketServer.sendResponse(
             { action: "answer", answerLabel: label, questionText: q.question } as never,
             clientFd,
           );
-          session.pendingQuestion = undefined;
-          session.status = "active";
-          delete sessionManager.pendingApprovalClients[sessionId];
-          emit("panelStateChange", { state: "compact" });
-          sessionManager.emitUpdate();
         }
+        session.pendingQuestion = undefined;
+        sessionManager.setStatus(sessionId, "active");
+        delete sessionManager.pendingApprovalClients[sessionId];
+        emit("panelStateChange", { state: "compact" });
+        sessionManager.emitUpdate();
       }
       return { success: true };
     }
@@ -141,6 +148,18 @@ onRequest(async (method, params) => {
       return { success: true };
     }
 
+    case "getHookHealth": {
+      const report = await checkHookHealth();
+      emit("hookHealth", report);
+      return report;
+    }
+
+    case "repairHooks": {
+      const report = await repairHooks();
+      emit("hookHealth", report);
+      return report;
+    }
+
     default:
       throw new Error(`Unknown method: ${method}`);
   }
@@ -155,7 +174,12 @@ processScanner.start();
 contextScanner.start();
 historyScanner.start();
 ghosttyFocusWatcher.start();
-installHooksIfNeeded().catch((err) => process.stderr.write(`[hookInstaller] error: ${err}\n`));
+usageWatcher.start();
+installHooksIfNeeded()
+  .then(() => installStatusLineIfNeeded())
+  .then(() => checkHookHealth())
+  .then((report) => emit("hookHealth", report))
+  .catch((err) => process.stderr.write(`[hookInstaller] error: ${err}\n`));
 
 // Heartbeat
 setInterval(() => {
@@ -168,6 +192,7 @@ function cleanup() {
   contextScanner.stop();
   historyScanner.stop();
   ghosttyFocusWatcher.stop();
+  usageWatcher.stop();
   socketServer.stop();
   process.exit(0);
 }

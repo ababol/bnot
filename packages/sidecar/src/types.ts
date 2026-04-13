@@ -9,7 +9,13 @@ export type MessageType =
   | "sessionEnd"
   | "stop"
   | "heartbeat"
-  | "userPromptSubmit";
+  | "userPromptSubmit"
+  | "stopFailure"
+  | "subagentStart"
+  | "subagentStop"
+  | "postToolUseFailure"
+  | "permissionDenied"
+  | "preCompact";
 
 export interface SocketMessage {
   type: MessageType;
@@ -29,6 +35,12 @@ export type MessagePayload = {
   stop?: StopPayload;
   heartbeat?: boolean;
   userPromptSubmit?: UserPromptSubmitPayload;
+  stopFailure?: Record<string, never>;
+  subagentStart?: Record<string, never>;
+  subagentStop?: Record<string, never>;
+  postToolUseFailure?: Record<string, never>;
+  permissionDenied?: Record<string, never>;
+  preCompact?: Record<string, never>;
 };
 
 export interface UserPromptSubmitPayload {

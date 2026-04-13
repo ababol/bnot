@@ -83,8 +83,11 @@ export class ProcessScanner {
     const hookByClaudePid: Record<number, string> = {};
     for (const [id, s] of Object.entries(this.sm.sessions)) {
       if (id.startsWith("proc-")) continue;
+      // Match by terminalPid (bridge PPID) or processPid (set by previous dedup merge)
       if (s.terminalPid != null) hookByClaudePid[s.terminalPid] = id;
+      if (s.processPid != null) hookByClaudePid[s.processPid] = id;
     }
+
 
     // Add / update proc-<pid> sessions. Skip any pid that's already
     // represented by a hook session (see comment above).
@@ -121,7 +124,7 @@ export class ProcessScanner {
       } else if (!isWorking) {
         this.sm.sessions[sessionId].taskStartedAt = undefined;
       }
-      this.sm.sessions[sessionId].status = "active";
+      this.sm.setStatus(sessionId, "active");
       this.sm.sessions[sessionId].tty = info.tty ?? undefined;
       this.sm.sessions[sessionId].processPid = info.pid;
       this.sm.sessions[sessionId].cpuPercent = info.cpuPercent;
@@ -149,10 +152,15 @@ export class ProcessScanner {
         isOrphan = Number.isFinite(pid) && !isPidAlive(pid);
       } else if (session.processPid != null) {
         isOrphan = !isPidAlive(session.processPid);
+      } else if (session.terminalPid != null) {
+        // Hook sessions without a processPid: check if the bridge's parent
+        // (terminalPid) is still alive. Catches stale subagent hook sessions
+        // whose parent process has exited.
+        isOrphan = !isPidAlive(session.terminalPid);
       }
 
       if (isOrphan) {
-        this.sm.sessions[id].status = "completed";
+        this.sm.setStatus(id, "completed");
         this.pendingDeletions.add(id);
         setTimeout(() => {
           delete this.sm.sessions[id];

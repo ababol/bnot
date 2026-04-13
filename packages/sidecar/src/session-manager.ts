@@ -6,6 +6,7 @@ import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
 const exec = promisify(execFile);
 
 const DEBOUNCE_MS = 50;
+const COMPLETED_MIN_MS = 5000;
 
 const CLAUDE_COLORS = ["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
 
@@ -25,8 +26,25 @@ export class SessionManager {
   focusedSessionId: string | null = null;
   pendingApprovalClients: Record<string, number> = {};
   coloredSessions = new Set<string>();
+  private completedAt: Record<string, number> = {};
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Set status, respecting the completed-minimum hold time. */
+  setStatus(sessionId: string, status: AgentSession["status"]) {
+    const s = this.sessions[sessionId];
+    if (!s) {
+      delete this.completedAt[sessionId];
+      return;
+    }
+    if (status !== "completed" && s.status === "completed") {
+      const elapsed = Date.now() - (this.completedAt[sessionId] ?? 0);
+      if (elapsed < COMPLETED_MIN_MS) return;
+      delete this.completedAt[sessionId];
+    }
+    s.status = status;
+    if (status === "completed") this.completedAt[sessionId] = Date.now();
+  }
 
   emitUpdate() {
     // Debounce: coalesce rapid updates into one event
@@ -102,7 +120,7 @@ export class SessionManager {
         this.sessions[sessionId].isThinking = true;
 
         if (p.toolName === "AskUserQuestion" && p.question) {
-          this.sessions[sessionId].status = "waitingAnswer";
+          this.setStatus(sessionId, "waitingAnswer");
           this.sessions[sessionId].pendingQuestion = {
             question: p.question,
             header: p.questionHeader,
@@ -114,7 +132,7 @@ export class SessionManager {
           this.flushUpdate();
           emit("panelStateChange", { state: "alert", sessionId });
         } else {
-          this.sessions[sessionId].status = "active";
+          this.setStatus(sessionId, "active");
         }
         break;
       }
@@ -136,7 +154,7 @@ export class SessionManager {
           this.flushUpdate();
           emit("panelStateChange", { state: "alert", sessionId });
         } else {
-          this.sessions[sessionId].status = "waitingApproval";
+          this.setStatus(sessionId, "waitingApproval");
           this.sessions[sessionId].pendingApproval = {
             toolName: p.toolName,
             filePath: p.filePath,
@@ -154,7 +172,7 @@ export class SessionManager {
       case "userPromptSubmit": {
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
-        this.sessions[sessionId].status = "active";
+        this.setStatus(sessionId, "active");
         this.sessions[sessionId].isThinking = true;
         this.heroSessionId = sessionId;
         break;
@@ -170,7 +188,7 @@ export class SessionManager {
           this.sessions[sessionId].status === "waitingApproval" ||
           this.sessions[sessionId].status === "waitingAnswer"
         ) {
-          this.sessions[sessionId].status = "active";
+          this.setStatus(sessionId, "active");
           emit("panelStateChange", { state: "compact" });
         }
         delete this.pendingApprovalClients[sessionId];
@@ -184,8 +202,12 @@ export class SessionManager {
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
 
         if (p.level === "success" || p.title.toLowerCase().includes("complete")) {
-          this.sessions[sessionId].status = "completed";
+          this.setStatus(sessionId, "completed");
           this.heroSessionId = sessionId;
+          // Emit taskCompleted so the frontend can play the done sound.
+          // Only fire this on genuine task completion — not on process death
+          // (which is detected by the process scanner and also sets "completed").
+          emit("taskCompleted", { sessionId });
         }
         break;
       }
@@ -206,9 +228,58 @@ export class SessionManager {
       case "stop": {
         if (this.sessions[sessionId]) {
           this.sessions[sessionId].isThinking = false;
-          this.sessions[sessionId].status = "completed";
+          this.setStatus(sessionId, "completed");
         }
         delete this.pendingApprovalClients[sessionId];
+        break;
+      }
+
+      case "stopFailure": {
+        if (this.sessions[sessionId]) {
+          this.sessions[sessionId].isThinking = false;
+          this.setStatus(sessionId, "completed");
+          this.sessions[sessionId].currentTool = undefined;
+        }
+        delete this.pendingApprovalClients[sessionId];
+        break;
+      }
+
+      case "subagentStart": {
+        this.ensureSession(sessionId, timestamp);
+        this.sessions[sessionId].isThinking = true;
+        this.setStatus(sessionId, "active");
+        break;
+      }
+
+      case "subagentStop": {
+        this.ensureSession(sessionId, timestamp);
+        // Parent session is still running after subagent completes
+        this.sessions[sessionId].isThinking = true;
+        break;
+      }
+
+      case "postToolUseFailure": {
+        this.ensureSession(sessionId, timestamp);
+        this.sessions[sessionId].currentTool = undefined;
+        this.sessions[sessionId].pendingApproval = undefined;
+        delete this.pendingApprovalClients[sessionId];
+        break;
+      }
+
+      case "permissionDenied": {
+        if (this.sessions[sessionId]) {
+          this.setStatus(sessionId, "completed");
+          this.sessions[sessionId].pendingApproval = undefined;
+          this.sessions[sessionId].isThinking = false;
+        }
+        delete this.pendingApprovalClients[sessionId];
+        emit("panelStateChange", { state: "compact" });
+        break;
+      }
+
+      case "preCompact": {
+        this.ensureSession(sessionId, timestamp);
+        this.sessions[sessionId].isThinking = true;
         break;
       }
 

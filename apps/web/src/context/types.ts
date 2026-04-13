@@ -103,6 +103,34 @@ export interface HistorySession {
   modified: string;
 }
 
+// Hook health types (mirrored from sidecar/hook-installer.ts)
+export type HookHealthIssue =
+  | { kind: "binaryNotFound"; searchedPaths: string[] }
+  | { kind: "binaryNotExecutable"; path: string }
+  | { kind: "configMalformedJSON"; path: string; error: string }
+  | { kind: "hooksMissing"; events: string[] }
+  | { kind: "otherHooksPresent"; commands: string[] };
+
+export interface HookHealthReport {
+  status: "healthy" | "degraded";
+  binaryPath: string | null;
+  configPath: string;
+  errors: HookHealthIssue[];
+  notices: HookHealthIssue[];
+}
+
+// Usage stats types (mirrored from sidecar/usage-watcher.ts)
+export interface UsageWindow {
+  usedPercent: number;
+  resetsAt: number; // unix ms
+}
+
+export interface UsageSnapshot {
+  fiveHour: UsageWindow | null;
+  sevenDay: UsageWindow | null;
+  cachedAt: number;
+}
+
 // Derived helpers
 
 export function contextPercent(s: AgentSession): number {

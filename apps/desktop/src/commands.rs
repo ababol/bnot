@@ -113,3 +113,15 @@ pub fn open_settings() {
 pub fn quit_app<R: Runtime>(app: AppHandle<R>) {
     app.exit(0);
 }
+
+#[command]
+pub fn get_hook_health<R: Runtime>(app: AppHandle<R>) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request("getHookHealth", serde_json::json!({}));
+}
+
+#[command]
+pub fn repair_hooks<R: Runtime>(app: AppHandle<R>) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request("repairHooks", serde_json::json!({}));
+}

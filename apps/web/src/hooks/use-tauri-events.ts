@@ -6,7 +6,9 @@ import {
   PANEL_STATES,
   type AgentSession,
   type HistorySession,
+  type HookHealthReport,
   type PanelState,
+  type UsageSnapshot,
 } from "../context/types";
 import { playSound } from "../lib/sound";
 import { collapsePanel, setPanelState } from "../lib/tauri";
@@ -27,29 +29,31 @@ export function useTauriEvents(
 ) {
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
-  const hasHydratedRef = useRef(false);
+  // Track which session IDs have already had their done sound played to
+  // prevent double-firing when two rapid sessionsUpdated events arrive before
+  // React re-renders (both would see stale "active" in sessionsRef).
+  const playedDoneRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const unlisten: Array<() => void> = [];
 
     listen<SessionsUpdatedPayload>("sessionsUpdated", (event) => {
-      if (hasHydratedRef.current) {
-        const prev = sessionsRef.current;
-        for (const [id, next] of Object.entries(event.payload.sessions)) {
-          const before = prev[id];
-          if (before && before.status !== "completed" && next.status === "completed") {
-            playSound("/done.mp3");
-            break;
-          }
-        }
-      } else {
-        hasHydratedRef.current = true;
-      }
       dispatch({
         type: "UPDATE_SESSIONS",
         sessions: event.payload.sessions,
         heroId: event.payload.heroId,
       });
+    }).then((u) => unlisten.push(u));
+
+    // taskCompleted fires only on genuine task completion (from a success
+    // notification in session-manager), not on process death or /exit.
+    listen<{ sessionId: string }>("taskCompleted", (event) => {
+      const { sessionId } = event.payload;
+      if (!playedDoneRef.current.has(sessionId)) {
+        playedDoneRef.current.add(sessionId);
+        playSound("/done.mp3");
+        setTimeout(() => playedDoneRef.current.delete(sessionId), 30_000);
+      }
     }).then((u) => unlisten.push(u));
 
     listen<{ state: string }>("panelStateChange", (event) => {
@@ -63,6 +67,14 @@ export function useTauriEvents(
 
     listen<{ history: HistorySession[] }>("historyUpdated", (event) => {
       dispatch({ type: "UPDATE_HISTORY", history: event.payload.history });
+    }).then((u) => unlisten.push(u));
+
+    listen<HookHealthReport>("hookHealth", (event) => {
+      dispatch({ type: "SET_HOOK_HEALTH", hookHealth: event.payload });
+    }).then((u) => unlisten.push(u));
+
+    listen<UsageSnapshot>("usageStats", (event) => {
+      dispatch({ type: "SET_USAGE_STATS", usageStats: event.payload });
     }).then((u) => unlisten.push(u));
 
     return () => {

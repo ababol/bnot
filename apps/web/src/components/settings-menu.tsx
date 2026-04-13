@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
+import { useSession } from "../context/session-context";
+import { formatTimeUntil } from "../lib/format";
 import { isSoundEnabled, setSoundEnabled } from "../lib/sound";
 
 interface Props {
@@ -10,8 +12,11 @@ interface Props {
 /** Menu items shared by the right-click Settings flyout and the gear dropdown:
  *  edit the JSON config, toggle "Launch at login". */
 export default function SettingsMenu({ onAction }: Props) {
+  const { state } = useSession();
+  const { hookHealth, usageStats } = state;
   const [autostartOn, setAutostartOn] = useState<boolean | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
+  const [repairing, setRepairing] = useState(false);
 
   useEffect(() => {
     isEnabled()
@@ -44,6 +49,15 @@ export default function SettingsMenu({ onAction }: Props) {
     setSoundOn(next);
   };
 
+  const handleRepairHooks = async () => {
+    setRepairing(true);
+    try {
+      await invoke("repair_hooks");
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   const handleQuit = () => {
     invoke("quit_app");
     onAction?.();
@@ -51,6 +65,37 @@ export default function SettingsMenu({ onAction }: Props) {
 
   return (
     <>
+      {hookHealth && (
+        <div className="flex w-full items-center gap-2 px-3 py-1.5 text-text-secondary">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${hookHealth.status === "healthy" ? "bg-bnot-green" : "bg-bnot-orange"}`}
+          />
+          <span className="flex-1 text-xs">
+            Hooks: {hookHealth.status === "healthy" ? "OK" : "Issues"}
+          </span>
+          {hookHealth.status === "degraded" && (
+            <button
+              onClick={handleRepairHooks}
+              disabled={repairing}
+              className="cursor-pointer rounded border-none bg-white/10 px-1.5 py-0.5 text-xs text-text-secondary hover:bg-white/20 disabled:opacity-50"
+            >
+              {repairing ? "…" : "Repair"}
+            </button>
+          )}
+        </div>
+      )}
+      {usageStats && (
+        <div className="px-3 py-1 text-xs text-text-dim">
+          {usageStats.fiveHour && (
+            <span>5h: {Math.round(usageStats.fiveHour.usedPercent)}% · resets {formatTimeUntil(usageStats.fiveHour.resetsAt)}</span>
+          )}
+          {usageStats.fiveHour && usageStats.sevenDay && <span className="mx-1">·</span>}
+          {usageStats.sevenDay && (
+            <span>7d: {Math.round(usageStats.sevenDay.usedPercent)}% · resets {formatTimeUntil(usageStats.sevenDay.resetsAt)}</span>
+          )}
+        </div>
+      )}
+      {(hookHealth || usageStats) && <div className="my-1 h-px bg-white/10" />}
       <button
         onClick={handleEditConfig}
         className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-text-secondary hover:bg-white/10"

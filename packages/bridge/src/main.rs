@@ -45,6 +45,20 @@ enum Commands {
     PermRequest,
     Notify,
     Stop,
+    #[command(name = "session-end")]
+    SessionEnd,
+    #[command(name = "stop-failure")]
+    StopFailure,
+    #[command(name = "subagent-start")]
+    SubagentStart,
+    #[command(name = "subagent-stop")]
+    SubagentStop,
+    #[command(name = "post-tool-failure")]
+    PostToolFailure,
+    #[command(name = "perm-denied")]
+    PermDenied,
+    #[command(name = "pre-compact")]
+    PreCompact,
 }
 
 fn main() {
@@ -67,26 +81,43 @@ fn main() {
         })
     });
 
+    let terminal_app = detect_terminal();
+    let parent_pid = get_parent_pid();
+
+    // Helper: send sessionStart preamble + a typed message on one connection.
+    // Halves socket churn vs two separate send_message calls.
+    let send_with_preamble = |typed: &SocketMessage| {
+        let ts = now_iso();
+        let start = SocketMessage {
+            r#type: "sessionStart",
+            session_id: &session_id,
+            timestamp: &ts,
+            payload: Payload::SessionStart {
+                session_start: SessionStartPayload {
+                    task_name: None,
+                    working_directory: &cwd,
+                    terminal_app,
+                    terminal_pid: parent_pid,
+                },
+            },
+            session_mode,
+        };
+        let mut stream = match UnixStream::connect(socket_path()) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        for msg in [&start, typed] {
+            if let Ok(json) = serde_json::to_string(msg) {
+                let _ = stream.write_all(json.as_bytes());
+                let _ = stream.write_all(b"\n");
+            }
+        }
+        let _ = stream.flush();
+    };
+
     match cli.command {
         Commands::UserPrompt => {
-            // Fire on UserPromptSubmit — tells sidecar Claude has started thinking
-            // so the status dot flips to "working" immediately, before any tool runs.
-            let _ = send_message(&SocketMessage {
-                r#type: "sessionStart",
-                session_id: &session_id,
-                timestamp: &now_iso(),
-                payload: Payload::SessionStart {
-                    session_start: SessionStartPayload {
-                        task_name: None,
-                        working_directory: &cwd,
-                        terminal_app: detect_terminal(),
-                        terminal_pid: get_parent_pid(),
-                    },
-                },
-                session_mode,
-            });
-
-            let _ = send_message(&SocketMessage {
+            send_with_preamble(&SocketMessage {
                 r#type: "userPromptSubmit",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -134,22 +165,7 @@ fn main() {
             let question = question_owned.as_deref();
             let question_header = header_owned.as_deref();
 
-            let _ = send_message(&SocketMessage {
-                r#type: "sessionStart",
-                session_id: &session_id,
-                timestamp: &now_iso(),
-                payload: Payload::SessionStart {
-                    session_start: SessionStartPayload {
-                        task_name: None,
-                        working_directory: &cwd,
-                        terminal_app: detect_terminal(),
-                        terminal_pid: get_parent_pid(),
-                    },
-                },
-                session_mode,
-            });
-
-            let _ = send_message(&SocketMessage {
+            send_with_preamble(&SocketMessage {
                 r#type: "preToolUse",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -196,16 +212,17 @@ fn main() {
             let permission_suggestions = hook.as_ref().and_then(|h| h.permission_suggestions.clone());
             let can_remember = permission_suggestions.is_some();
 
+            let ts = now_iso();
             let session_start = SocketMessage {
                 r#type: "sessionStart",
                 session_id: &session_id,
-                timestamp: &now_iso(),
+                timestamp: &ts,
                 payload: Payload::SessionStart {
                     session_start: SessionStartPayload {
                         task_name: None,
                         working_directory: &cwd,
-                        terminal_app: detect_terminal(),
-                        terminal_pid: get_parent_pid(),
+                        terminal_app,
+                        terminal_pid: parent_pid,
                     },
                 },
                 session_mode,
@@ -294,21 +311,6 @@ fn main() {
         }
 
         Commands::PostTool => {
-            let _ = send_message(&SocketMessage {
-                r#type: "sessionStart",
-                session_id: &session_id,
-                timestamp: &now_iso(),
-                payload: Payload::SessionStart {
-                    session_start: SessionStartPayload {
-                        task_name: None,
-                        working_directory: &cwd,
-                        terminal_app: detect_terminal(),
-                        terminal_pid: get_parent_pid(),
-                    },
-                },
-                session_mode,
-            });
-
             let tool_name = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Tool");
             let file_path = hook.as_ref().and_then(|h| {
                 h.tool_input
@@ -317,7 +319,7 @@ fn main() {
                     .or_else(|| h.tool_response.as_ref()?.file_path.as_deref())
             });
 
-            let _ = send_message(&SocketMessage {
+            send_with_preamble(&SocketMessage {
                 r#type: "postToolUse",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -335,22 +337,7 @@ fn main() {
         Commands::Notify => {
             let title = hook.as_ref().and_then(|h| h.tool_name.as_deref()).unwrap_or("Notification");
 
-            let _ = send_message(&SocketMessage {
-                r#type: "sessionStart",
-                session_id: &session_id,
-                timestamp: &now_iso(),
-                payload: Payload::SessionStart {
-                    session_start: SessionStartPayload {
-                        task_name: None,
-                        working_directory: &cwd,
-                        terminal_app: detect_terminal(),
-                        terminal_pid: get_parent_pid(),
-                    },
-                },
-                session_mode,
-            });
-
-            let _ = send_message(&SocketMessage {
+            send_with_preamble(&SocketMessage {
                 r#type: "notification",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -366,22 +353,7 @@ fn main() {
         }
 
         Commands::Stop => {
-            let _ = send_message(&SocketMessage {
-                r#type: "sessionStart",
-                session_id: &session_id,
-                timestamp: &now_iso(),
-                payload: Payload::SessionStart {
-                    session_start: SessionStartPayload {
-                        task_name: None,
-                        working_directory: &cwd,
-                        terminal_app: detect_terminal(),
-                        terminal_pid: get_parent_pid(),
-                    },
-                },
-                session_mode,
-            });
-
-            let _ = send_message(&SocketMessage {
+            send_with_preamble(&SocketMessage {
                 r#type: "sessionEnd",
                 session_id: &session_id,
                 timestamp: &now_iso(),
@@ -393,6 +365,81 @@ fn main() {
                 session_mode,
             });
         }
+
+        Commands::SessionEnd => {
+            send_with_preamble(&SocketMessage {
+                r#type: "sessionEnd",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::SessionEnd {
+                    session_end: SessionEndPayload {
+                        reason: Some("terminated"),
+                    },
+                },
+                session_mode,
+            });
+        }
+
+        Commands::StopFailure => {
+            send_with_preamble(&SocketMessage {
+                r#type: "stopFailure",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::StopFailure { stop_failure: EmptyPayload {} },
+                session_mode,
+            });
+        }
+
+        Commands::SubagentStart => {
+            send_with_preamble(&SocketMessage {
+                r#type: "subagentStart",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::SubagentStart { subagent_start: EmptyPayload {} },
+                session_mode,
+            });
+        }
+
+        Commands::SubagentStop => {
+            send_with_preamble(&SocketMessage {
+                r#type: "subagentStop",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::SubagentStop { subagent_stop: EmptyPayload {} },
+                session_mode,
+            });
+        }
+
+        Commands::PostToolFailure => {
+            send_with_preamble(&SocketMessage {
+                r#type: "postToolUseFailure",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::PostToolUseFailure { post_tool_use_failure: EmptyPayload {} },
+                session_mode,
+            });
+        }
+
+        Commands::PermDenied => {
+            send_with_preamble(&SocketMessage {
+                r#type: "permissionDenied",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::PermissionDenied { permission_denied: EmptyPayload {} },
+                session_mode,
+            });
+        }
+
+        Commands::PreCompact => {
+            send_with_preamble(&SocketMessage {
+                r#type: "preCompact",
+                session_id: &session_id,
+                timestamp: &now_iso(),
+                payload: Payload::PreCompact { pre_compact: EmptyPayload {} },
+                session_mode,
+            });
+        }
+
     }
 }
 
@@ -476,28 +523,17 @@ fn now_iso() -> String {
     }
 }
 
-fn send_message(msg: &SocketMessage) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stream = UnixStream::connect(socket_path())?;
-    let json = serde_json::to_string(msg)?;
-    stream.write_all(json.as_bytes())?;
-    stream.write_all(b"\n")?;
-    stream.flush()?;
-    Ok(())
-}
-
 /// Send two messages on a single connection and block until a response is received.
 /// Returns None on connection failure, timeout, or parse error (graceful fallback).
 fn send_and_wait(msg1: &SocketMessage, msg2: &SocketMessage) -> Option<ApprovalResponse> {
     let mut stream = UnixStream::connect(socket_path()).ok()?;
     stream.set_read_timeout(Some(APPROVAL_TIMEOUT)).ok()?;
 
-    // Write both messages on the same connection
-    let json1 = serde_json::to_string(msg1).ok()?;
-    let json2 = serde_json::to_string(msg2).ok()?;
-    stream.write_all(json1.as_bytes()).ok()?;
-    stream.write_all(b"\n").ok()?;
-    stream.write_all(json2.as_bytes()).ok()?;
-    stream.write_all(b"\n").ok()?;
+    for msg in [msg1, msg2] {
+        let json = serde_json::to_string(msg).ok()?;
+        stream.write_all(json.as_bytes()).ok()?;
+        stream.write_all(b"\n").ok()?;
+    }
     stream.flush().ok()?;
 
     // Block reading until sidecar sends a response line
@@ -556,10 +592,37 @@ enum Payload<'a> {
         #[serde(rename = "userPromptSubmit")]
         user_prompt_submit: UserPromptSubmitPayload,
     },
+    StopFailure {
+        #[serde(rename = "stopFailure")]
+        stop_failure: EmptyPayload,
+    },
+    SubagentStart {
+        #[serde(rename = "subagentStart")]
+        subagent_start: EmptyPayload,
+    },
+    SubagentStop {
+        #[serde(rename = "subagentStop")]
+        subagent_stop: EmptyPayload,
+    },
+    PostToolUseFailure {
+        #[serde(rename = "postToolUseFailure")]
+        post_tool_use_failure: EmptyPayload,
+    },
+    PermissionDenied {
+        #[serde(rename = "permissionDenied")]
+        permission_denied: EmptyPayload,
+    },
+    PreCompact {
+        #[serde(rename = "preCompact")]
+        pre_compact: EmptyPayload,
+    },
 }
 
 #[derive(Serialize)]
 struct UserPromptSubmitPayload {}
+
+#[derive(Serialize)]
+struct EmptyPayload {}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -628,3 +691,4 @@ struct SessionEndPayload<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<&'a str>,
 }
+
