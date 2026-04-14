@@ -204,7 +204,11 @@ fn kill_stale_sidecar() {
             let is_orphan_sidecar = ppid == "1"
                 && (args.contains("index.mjs")
                     || (args.contains("src/index.ts") && args.contains("sidecar")));
-            let is_bridge = args.contains("bnot-bridge");
+            // Only match processes whose executable is literally bnot-bridge,
+            // not anything that merely mentions it in argv (e.g. the pnpm/sh
+            // wrapper running `cargo build -p bnot-bridge && tauri dev`).
+            let argv0 = args.split_ascii_whitespace().next().unwrap_or("");
+            let is_bridge = argv0.ends_with("/bnot-bridge") || argv0 == "bnot-bridge";
 
             if is_orphan_sidecar {
                 eprintln!("[sidecar] killing orphaned sidecar (pid {pid})");

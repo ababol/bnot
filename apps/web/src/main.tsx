@@ -5,4 +5,6 @@ import { runUpdateCheck } from "./lib/updater";
 
 createRoot(document.getElementById("root")!).render(<App />);
 
-void runUpdateCheck();
+if (import.meta.env.PROD) {
+  void runUpdateCheck();
+}

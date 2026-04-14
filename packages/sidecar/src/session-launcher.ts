@@ -6,7 +6,19 @@ import { escapeForAppleScript, escapeShell } from "./terminal-utils.js";
 const exec = promisify(execFile);
 
 export async function resumeSession(sessionId: string, projectPath: string): Promise<void> {
-  await launchCommand(`cd '${escapeShell(projectPath)}' && claude --resume ${sessionId}`);
+  if (!isValidSessionId(sessionId)) {
+    process.stderr.write(
+      `[session-launcher] refused resume: invalid session id ${JSON.stringify(sessionId)}\n`,
+    );
+    return;
+  }
+  await launchCommand(
+    `cd '${escapeShell(projectPath)}' && claude --resume '${escapeShell(sessionId)}'`,
+  );
+}
+
+function isValidSessionId(id: string): boolean {
+  return /^[a-fA-F0-9-]{8,64}$/.test(id) || /^proc-\d+$/.test(id);
 }
 
 export async function startNewSession(projectPath: string): Promise<void> {

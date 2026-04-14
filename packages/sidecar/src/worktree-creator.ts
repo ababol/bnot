@@ -43,6 +43,21 @@ export class WorktreeCreator {
   ): Promise<{ success: boolean; path?: string; error?: string; skipped?: boolean }> {
     process.stderr.write(`[worktree] request: ${req.headOwner}/${req.headRepo}#${req.branch}\n`);
 
+    // Refuse fork branches via deep link: their contents (including
+    // .cursor/worktrees.json) would be executed by runCursorSetup, and the
+    // fork source is attacker-choosable in a deep-link URL.
+    const sameSource =
+      req.headOwner.toLowerCase() === req.owner.toLowerCase() &&
+      req.headRepo.toLowerCase() === req.repo.toLowerCase();
+    if (!sameSource) {
+      const msg =
+        `Cannot create worktree from fork ${req.headOwner}/${req.headRepo} ` +
+        `of ${req.owner}/${req.repo} via deep link.`;
+      process.stderr.write(`[worktree] ${msg}\n`);
+      emit("worktreeStatus", { status: "error", message: msg });
+      return { success: false, error: msg };
+    }
+
     // 1. Find local repo
     let repoPath = await this.repoFinder.findRepo(req.headOwner, req.headRepo);
     if (!repoPath) {
