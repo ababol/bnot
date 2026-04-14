@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/main/nicegui/static/tauri/schema.json",
   "productName": "Bnot",
-  "version": "0.1.0",
+  "version": "0.1.10",
   "identifier": "com.bnot.app",
   "build": {
     "frontendDist": "../web/dist",

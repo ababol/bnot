@@ -19,7 +19,9 @@ export default function CompactView({ notchWidth }: Props) {
   const { state, dispatch } = useSession();
   const sessions = state.sessions;
   const heroSession = useHeroSession();
-  const sessionCount = Object.values(sessions).filter((s) => s.status !== "completed").length;
+  const sessionCount = Object.values(sessions).filter(
+    (s) => s.status === "active" || needsAttention(s),
+  ).length;
   const hasApproval = Object.values(sessions).some(needsAttention);
   const notchGap = notchWidth + 16;
   const heroPct = heroSession ? contextPercent(heroSession) : 0;

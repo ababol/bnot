@@ -80,6 +80,18 @@ export class SessionManager {
         const p = payload.sessionStart;
         if (!p) break;
         if (!this.sessions[sessionId]) {
+          // Claude auto-compact rotates session IDs but keeps the same process alive.
+          // Evict the stale entry so only the new session ID owns this terminalPid.
+          if (p.terminalPid) {
+            for (const [existingId, existing] of Object.entries(this.sessions)) {
+              if (existingId.startsWith("proc-")) continue;
+              if (existing.terminalPid === p.terminalPid) {
+                if (this.heroSessionId === existingId) this.heroSessionId = sessionId;
+                delete this.sessions[existingId];
+                break;
+              }
+            }
+          }
           this.sessions[sessionId] = {
             id: sessionId,
             workingDirectory: p.workingDirectory,
