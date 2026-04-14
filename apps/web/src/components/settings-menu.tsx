@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { useEffect, useState } from "react";
 import { useSession } from "../context/session-context";
-import { formatTimeUntil } from "../lib/format";
+import { formatResetAt } from "../lib/format";
 import { isSoundEnabled, setSoundEnabled } from "../lib/sound";
 import { runUpdateCheck, type UpdateStatus } from "../lib/updater";
 
@@ -87,19 +87,18 @@ export default function SettingsMenu({ onAction }: Props) {
         </div>
       )}
       {usageStats && (
-        <div className="px-3 py-1 text-xs text-text-dim">
+        <div className="flex flex-col gap-0.5 whitespace-nowrap px-3 py-1 text-xs text-text-dim">
           {usageStats.fiveHour && (
-            <span>
-              5h: {Math.round(usageStats.fiveHour.usedPercent)}% · resets{" "}
-              {formatTimeUntil(usageStats.fiveHour.resetsAt)}
-            </span>
+            <div>
+              5h: {Math.round(usageStats.fiveHour.usedPercent)}% ·{" "}
+              {formatResetAt(usageStats.fiveHour.resetsAt)}
+            </div>
           )}
-          {usageStats.fiveHour && usageStats.sevenDay && <span className="mx-1">·</span>}
           {usageStats.sevenDay && (
-            <span>
-              7d: {Math.round(usageStats.sevenDay.usedPercent)}% · resets{" "}
-              {formatTimeUntil(usageStats.sevenDay.resetsAt)}
-            </span>
+            <div>
+              7d: {Math.round(usageStats.sevenDay.usedPercent)}% ·{" "}
+              {formatResetAt(usageStats.sevenDay.resetsAt)}
+            </div>
           )}
         </div>
       )}
