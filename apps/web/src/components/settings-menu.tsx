@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "../context/session-context";
 import { formatTimeUntil } from "../lib/format";
 import { isSoundEnabled, setSoundEnabled } from "../lib/sound";
+import { runUpdateCheck, type UpdateStatus } from "../lib/updater";
 
 interface Props {
   onAction?: () => void;
@@ -17,6 +18,7 @@ export default function SettingsMenu({ onAction }: Props) {
   const [autostartOn, setAutostartOn] = useState<boolean | null>(null);
   const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
   const [repairing, setRepairing] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
 
   useEffect(() => {
     isEnabled()
@@ -116,6 +118,18 @@ export default function SettingsMenu({ onAction }: Props) {
       >
         <span className="w-3 text-text-dim">{soundOn ? "\u2713" : ""}</span>
         <span>Enable sound</span>
+      </button>
+      <button
+        onClick={() => runUpdateCheck(setUpdateStatus)}
+        disabled={updateStatus === "checking" || updateStatus === "downloading"}
+        className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-text-secondary hover:bg-white/10 disabled:opacity-50"
+      >
+        <span className="w-3 text-text-dim">
+          {updateStatus === "up-to-date" ? "\u2713" : ""}
+        </span>
+        <span>
+          {{ checking: "Checking...", downloading: "Updating...", "up-to-date": "Up to date", error: "Update failed", idle: "Check for updates" }[updateStatus]}
+        </span>
       </button>
       <div className="my-1 h-px bg-white/10" />
       <button
