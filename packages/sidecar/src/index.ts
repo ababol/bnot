@@ -209,5 +209,7 @@ function cleanup() {
 
 process.on("SIGTERM", cleanup);
 process.on("SIGINT", cleanup);
+// Exit when Tauri parent closes stdin (parent died without sending SIGTERM)
+process.stdin.on("close", cleanup);
 
 process.stderr.write("[sidecar] started\n");

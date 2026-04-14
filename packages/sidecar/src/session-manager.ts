@@ -1,5 +1,6 @@
 import { execFile } from "child_process";
 import { writeFile } from "fs/promises";
+import { basename } from "path";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
 import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
@@ -360,7 +361,7 @@ export class SessionManager {
     try {
       // Write a stable marker to the TTY. With CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
       // (set by hook-installer), Claude Code won't overwrite it.
-      const marker = `bnot · ${session.id.slice(0, 8)}`;
+      const marker = `${basename(session.workingDirectory)} · ${session.id.slice(0, 8)}`;
       await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
       await new Promise((r) => setTimeout(r, 30));
 
