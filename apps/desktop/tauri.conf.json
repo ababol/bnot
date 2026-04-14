@@ -46,6 +46,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": {
       "../../packages/sidecar/dist/index.mjs": "sidecar/index.mjs",
       "../../target/release/bnot-bridge": "bin/bnot-bridge"
