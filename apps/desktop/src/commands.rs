@@ -14,7 +14,12 @@ pub fn set_panel_state<R: Runtime>(app: AppHandle<R>, state: String) -> Result<(
         .ok_or("Window not found")?;
 
     let geom = notch::get_notch_geometry().ok_or("No notch detected")?;
-    let (x, y, w, h) = window::expanded_frame(&state, &geom);
+    let panel = window::PanelState::parse(&state);
+    let (x, y, w, h) = window::expanded_frame(panel, &geom);
+
+    // Tell the hover watcher about the new state before animating, so its
+    // zone bounds match the state the window is transitioning into.
+    window::set_current_panel_state(panel);
 
     // Use animated transition instead of instant set_position/set_size
     window::animate_frame(&win, x, y, w, h);
@@ -22,7 +27,7 @@ pub fn set_panel_state<R: Runtime>(app: AppHandle<R>, state: String) -> Result<(
 
     // Make the window key when expanding so that clicking outside triggers
     // a blur event, allowing the frontend to collapse back to compact.
-    if state != "compact" {
+    if panel != window::PanelState::Compact {
         window::make_key_window(&win);
     }
 

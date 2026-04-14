@@ -1,9 +1,51 @@
 use crate::notch::NotchGeometry;
+use std::sync::atomic::{AtomicU8, Ordering};
 use tauri::{AppHandle, Emitter, Runtime, WebviewWindow};
 
 const COMPACT_SIDE_EXTENSION: f64 = 68.0;
 const ANIMATION_DURATION: f64 = 0.2;
 const WINDOW_LEVEL_ABOVE_STATUS: i64 = 26; // CGWindowLevelForKey(.statusWindow) + 1
+
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum PanelState {
+    Compact = 0,
+    Alert = 1,
+    Overview = 2,
+    Approval = 3,
+    Ask = 4,
+}
+
+impl PanelState {
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "alert" => Self::Alert,
+            "overview" => Self::Overview,
+            "approval" => Self::Approval,
+            "ask" => Self::Ask,
+            _ => Self::Compact,
+        }
+    }
+
+    fn from_raw(raw: u8) -> Self {
+        match raw {
+            1 => Self::Alert,
+            2 => Self::Overview,
+            3 => Self::Approval,
+            4 => Self::Ask,
+            _ => Self::Compact,
+        }
+    }
+}
+
+static CURRENT_PANEL_STATE: AtomicU8 = AtomicU8::new(PanelState::Compact as u8);
+
+/// Record the panel state so the hover watcher can pick bounds that match
+/// what's on screen. Without this, shorter panels (overview) leave a phantom
+/// band below them where cursor-exit never fires.
+pub fn set_current_panel_state(state: PanelState) {
+    CURRENT_PANEL_STATE.store(state as u8, Ordering::Relaxed);
+}
 
 /// Compact frame: returns (x, width, height) in logical points.
 pub fn compact_frame(geom: &NotchGeometry) -> (f64, f64, f64) {
@@ -14,26 +56,21 @@ pub fn compact_frame(geom: &NotchGeometry) -> (f64, f64, f64) {
 }
 
 /// Expanded frame for a given panel state: returns (x, y, width, height) in logical points.
-pub fn expanded_frame(state: &str, geom: &NotchGeometry) -> (f64, f64, f64, f64) {
+pub fn expanded_frame(state: PanelState, geom: &NotchGeometry) -> (f64, f64, f64, f64) {
     let (w, h) = match state {
-        "compact" => {
+        PanelState::Compact => {
             let (x, w, h) = compact_frame(geom);
             return (x, 0.0, w, h);
         }
-        "alert" => {
+        PanelState::Alert => {
             // Wider compact to fit bell + session count
             let w = geom.notch_width + COMPACT_SIDE_EXTENSION * 2.0 + 30.0;
             let h = geom.notch_height;
             let x = geom.center_x - w / 2.0;
             return (x, 0.0, w, h);
         }
-        "overview" => (geom.notch_width + 380.0, 300.0),
-        "approval" => (geom.notch_width + 380.0, 520.0),
-        "ask" => (geom.notch_width + 380.0, 520.0),
-        _ => {
-            let (x, w, h) = compact_frame(geom);
-            return (x, 0.0, w, h);
-        }
+        PanelState::Overview => (geom.notch_width + 380.0, 300.0),
+        PanelState::Approval | PanelState::Ask => (geom.notch_width + 380.0, 520.0),
     };
 
     let x = geom.center_x - w / 2.0;
@@ -115,11 +152,18 @@ pub fn start_hover_watcher<R: Runtime>(app: AppHandle<R>) {
 
         let Some(geom) = crate::notch::get_notch_geometry() else { continue };
         let (cx, cw, ch) = compact_frame(&geom);
-        // Use the tallest expanded variant so we don't accidentally fire "zone
-        // exit" when the panel is in approval/ask mode (which is taller than overview).
-        let (ex, _, ew, eh_overview) = expanded_frame("overview", &geom);
-        let (_, _, _, eh_approval) = expanded_frame("approval", &geom);
-        let eh = eh_overview.max(eh_approval);
+        // In expanded states the zone must match the rendered panel, or a
+        // phantom band below shorter panels (overview) keeps them stuck open.
+        // In collapsed states the panel is closed, so widen the zone to the
+        // tallest expanded variant (approval) — cursor movements near the
+        // notch then emit trigger=false events that prime compact-view's
+        // `sawExit` guard, which gates the first hover-to-open.
+        let current = PanelState::from_raw(CURRENT_PANEL_STATE.load(Ordering::Relaxed));
+        let zone_state = match current {
+            PanelState::Compact | PanelState::Alert => PanelState::Approval,
+            other => other,
+        };
+        let (ex, _, ew, eh) = expanded_frame(zone_state, &geom);
 
         let Ok(source) = CGEventSource::new(CGEventSourceStateID::HIDSystemState) else { continue };
         let Ok(event) = CGEvent::new(source) else { continue };
