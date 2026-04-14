@@ -1,9 +1,10 @@
 import { execFile, spawn } from "child_process";
-import { readdir, readFile, rm } from "fs/promises";
+import { mkdir, readdir, readFile, rm } from "fs/promises";
 import { platform } from "os";
-import { dirname, resolve as resolvePath } from "path";
+import { basename, dirname, join, resolve as resolvePath } from "path";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
+import { WORKTREES_DIR } from "./paths.js";
 import { RepoFinder } from "./repo-finder.js";
 import { startNewSession } from "./session-launcher.js";
 import { SessionManager } from "./session-manager.js";
@@ -120,11 +121,12 @@ export class WorktreeCreator {
       return { success: false, error: msg };
     }
 
-    // 5. Create worktree
+    // 5. Create worktree under ~/.bnot/worktrees/<repo>/<slug>
     const dirName = sanitizeBranchName(req.branch);
-    const worktreePath = `${repoPath}/.claude/worktrees/${dirName}`;
+    const worktreePath = join(WORKTREES_DIR, basename(repoPath), dirName);
 
     try {
+      await mkdir(dirname(worktreePath), { recursive: true });
       process.stderr.write(`[worktree] creating at ${worktreePath}\n`);
       await exec(
         "git",

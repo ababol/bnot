@@ -228,7 +228,14 @@ export async function repairHooks(): Promise<HookHealthReport> {
 
 // ── Status line (usage stats) ────────────────────────────────────────────────
 
-import { RUNTIME_DIR, STATUSLINE_PATH, USAGE_PATH } from "./paths.js";
+import {
+  RUNTIME_DIR,
+  STATUSLINE_PATH,
+  USAGE_PATH,
+  WORKTREE_CREATE_PATH,
+  WORKTREE_REMOVE_PATH,
+  WORKTREES_DIR,
+} from "./paths.js";
 
 export async function installStatusLineIfNeeded(): Promise<void> {
   let settings: Record<string, unknown>;
@@ -283,6 +290,139 @@ export async function installStatusLineIfNeeded(): Promise<void> {
     process.stderr.write("[hookInstaller] statusLine installed\n");
   } catch (e) {
     process.stderr.write(`[hookInstaller] failed to update settings for statusLine: ${e}\n`);
+  }
+}
+
+// ── Worktree hooks (centralize worktrees under ~/.bnot/worktrees) ────────────
+
+const WORKTREE_CREATE_SCRIPT =
+  [
+    "#!/bin/bash",
+    "set -e",
+    "input=$(cat)",
+    'cwd=$(echo "$input" | jq -r ".cwd")',
+    'name=$(echo "$input" | jq -r ".name")',
+    'gitroot=$(git -C "$cwd" rev-parse --show-toplevel)',
+    'repo=$(basename "$gitroot")',
+    'slug=$(echo "$name" | tr "/" "+")',
+    `target="${WORKTREES_DIR}/$repo/$slug"`,
+    'branch="worktree-$slug"',
+    'mkdir -p "$(dirname "$target")"',
+    'if [ ! -e "$target/.git" ]; then',
+    '  git -C "$gitroot" worktree add -B "$branch" "$target" HEAD >&2',
+    "fi",
+    'echo "$target"',
+  ].join("\n") + "\n";
+
+const WORKTREE_REMOVE_SCRIPT =
+  [
+    "#!/bin/bash",
+    "input=$(cat)",
+    'wt=$(echo "$input" | jq -r ".worktree_path")',
+    '[ -z "$wt" ] && exit 0',
+    'gitdir=$(git -C "$wt" rev-parse --git-common-dir 2>/dev/null || true)',
+    'if [ -n "$gitdir" ]; then',
+    '  repo=$(cd "$wt" && cd "$gitdir/.." && pwd)',
+    '  git -C "$repo" worktree remove --force "$wt" 2>/dev/null || true',
+    "fi",
+    'rm -rf "$wt"',
+  ].join("\n") + "\n";
+
+function isBnotWorktreeHook(command: string | undefined): boolean {
+  return !!command && (command === WORKTREE_CREATE_PATH || command === WORKTREE_REMOVE_PATH);
+}
+
+function hasNonBnotHook(entries: HookEntry[] | undefined): boolean {
+  if (!entries) return false;
+  return entries.some((entry) =>
+    entry.hooks?.some((h) => h.command && !isBnotWorktreeHook(h.command)),
+  );
+}
+
+function hasBnotHookEntry(entries: HookEntry[] | undefined, command: string): boolean {
+  return !!entries?.some((e) => e.hooks?.some((h) => h.command === command));
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function installWorktreeHooksIfNeeded(): Promise<void> {
+  let settings: Record<string, unknown>;
+  try {
+    const data = await fs.readFile(SETTINGS_PATH, "utf-8");
+    settings = JSON.parse(data);
+  } catch {
+    return; // settings.json missing or invalid — skip silently
+  }
+
+  const hooks = (settings.hooks ?? {}) as Record<string, HookEntry[]>;
+
+  if (hasNonBnotHook(hooks.WorktreeCreate) || hasNonBnotHook(hooks.WorktreeRemove)) {
+    process.stderr.write(
+      "[hookInstaller] user-configured Worktree hook present, skipping bnot worktree hooks\n",
+    );
+    return;
+  }
+
+  // Fast path: scripts already on disk AND settings already reference them.
+  const alreadyInstalled =
+    hasBnotHookEntry(hooks.WorktreeCreate, WORKTREE_CREATE_PATH) &&
+    hasBnotHookEntry(hooks.WorktreeRemove, WORKTREE_REMOVE_PATH) &&
+    (await fileExists(WORKTREE_CREATE_PATH)) &&
+    (await fileExists(WORKTREE_REMOVE_PATH));
+  if (alreadyInstalled) {
+    process.stderr.write("[hookInstaller] worktree hooks already installed\n");
+    return;
+  }
+
+  try {
+    await fs.mkdir(RUNTIME_DIR, { recursive: true });
+    await Promise.all([
+      fs.writeFile(WORKTREE_CREATE_PATH, WORKTREE_CREATE_SCRIPT, { mode: 0o755 }),
+      fs.writeFile(WORKTREE_REMOVE_PATH, WORKTREE_REMOVE_SCRIPT, { mode: 0o755 }),
+    ]);
+  } catch (e) {
+    process.stderr.write(`[hookInstaller] failed to write worktree scripts: ${e}\n`);
+    return;
+  }
+
+  const stripBnot = (entries: HookEntry[] | undefined): HookEntry[] => {
+    if (!entries) return [];
+    return entries
+      .map((e) => ({
+        ...e,
+        hooks: e.hooks?.filter((h) => !isBnotWorktreeHook(h.command)),
+      }))
+      .filter((e) => (e.hooks?.length ?? 0) > 0);
+  };
+
+  const createEntries = stripBnot(hooks.WorktreeCreate);
+  createEntries.push({
+    matcher: "",
+    hooks: [{ type: "command", command: WORKTREE_CREATE_PATH }],
+  });
+  hooks.WorktreeCreate = createEntries;
+
+  const removeEntries = stripBnot(hooks.WorktreeRemove);
+  removeEntries.push({
+    matcher: "",
+    hooks: [{ type: "command", command: WORKTREE_REMOVE_PATH }],
+  });
+  hooks.WorktreeRemove = removeEntries;
+
+  settings.hooks = hooks;
+
+  try {
+    await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+    process.stderr.write("[hookInstaller] worktree hooks installed\n");
+  } catch (e) {
+    process.stderr.write(`[hookInstaller] failed to update settings for worktree hooks: ${e}\n`);
   }
 }
 

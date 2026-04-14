@@ -8,4 +8,7 @@ export const SOCKET_PATH = path.join(RUNTIME_DIR, "bnot.sock");
 export const PID_PATH = path.join(RUNTIME_DIR, "bnot.pid");
 export const USAGE_PATH = path.join(RUNTIME_DIR, "usage.json");
 export const STATUSLINE_PATH = path.join(RUNTIME_DIR, "statusline.sh");
+export const WORKTREES_DIR = path.join(RUNTIME_DIR, "worktrees");
+export const WORKTREE_CREATE_PATH = path.join(RUNTIME_DIR, "worktree-create.sh");
+export const WORKTREE_REMOVE_PATH = path.join(RUNTIME_DIR, "worktree-remove.sh");
 export const ctxFilePath = (sessionId: string) => path.join(RUNTIME_DIR, `ctx-${sessionId}.json`);

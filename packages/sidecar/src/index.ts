@@ -5,6 +5,7 @@ import {
   checkHookHealth,
   installHooksIfNeeded,
   installStatusLineIfNeeded,
+  installWorktreeHooksIfNeeded,
   repairHooks,
 } from "./hook-installer.js";
 import { emit, onRequest } from "./ipc.js";
@@ -185,6 +186,7 @@ ghosttyFocusWatcher.start();
 usageWatcher.start();
 installHooksIfNeeded()
   .then(() => installStatusLineIfNeeded())
+  .then(() => installWorktreeHooksIfNeeded())
   .then(() => checkHookHealth())
   .then((report) => emit("hookHealth", report))
   .catch((err) => process.stderr.write(`[hookInstaller] error: ${err}\n`));
