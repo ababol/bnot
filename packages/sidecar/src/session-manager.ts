@@ -1,4 +1,5 @@
 import { execFile } from "child_process";
+import { writeFile } from "fs/promises";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
 import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
@@ -84,6 +85,7 @@ export class SessionManager {
             taskName: p.taskName,
             terminalApp: p.terminalApp,
             terminalPid: p.terminalPid,
+            ghosttyTerminalId: p.ghosttyTerminalId,
             status: "active",
             startedAt: Date.now(),
             lastActivity: new Date(timestamp).getTime(),
@@ -91,6 +93,8 @@ export class SessionManager {
             maxContextTokens: 0,
             cpuPercent: 0,
           };
+          // Enrich with TTY and git info (async, fire-and-forget)
+          void this.enrichSession(sessionId);
         } else {
           if (p.taskName) this.sessions[sessionId].taskName = p.taskName;
           if (p.terminalApp) this.sessions[sessionId].terminalApp = p.terminalApp;
@@ -184,9 +188,15 @@ export class SessionManager {
       case "userPromptSubmit": {
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
+        this.sessions[sessionId].taskStartedAt = Date.now();
         this.setStatus(sessionId, "active");
         this.sessions[sessionId].isThinking = true;
         this.heroSessionId = sessionId;
+        // User is typing in Ghostty right now — inject /color if not yet set
+        const s = this.sessions[sessionId];
+        if (s.tty && !this.coloredSessions.has(sessionId)) {
+          this.tryInjectColor(s);
+        }
         break;
       }
 
@@ -334,42 +344,9 @@ export class SessionManager {
     void this._bootstrapGhostty(session, injectColor);
   }
 
-  /**
-   * Capture only the Ghostty terminal id for a session. Writes a one-shot
-   * OSC-title marker to its tty, queries Ghostty for the terminal with that
-   * name, reads its stable `id`, and stops — never focuses the terminal and
-   * never touches frontApp. The marker lives ~60ms before the shell/Claude
-   * rewrites the title; the id is stable for the lifetime of the tab.
-   */
   tryCaptureTerminalId(session: AgentSession) {
     if (session.ghosttyTerminalId) return;
-    void this._captureTerminalId(session);
-  }
-
-  private async _captureTerminalId(session: AgentSession) {
-    const tty = session.tty;
-    if (!tty || !/^ttys\d+$/.test(tty)) return;
-    if (session.terminalApp && session.terminalApp !== "Ghostty") return;
-
-    try {
-      const { writeFile } = await import("fs/promises");
-      const marker = `bnot-id-${Math.random().toString(36).slice(2, 6)}`;
-      await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
-      await new Promise((r) => setTimeout(r, 60));
-
-      const script = `tell application "Ghostty"
-  set matches to every terminal whose name is "${marker}"
-  if (count of matches) > 0 then
-    return id of (item 1 of matches) as text
-  end if
-end tell
-return ""`;
-      const { stdout } = await exec("/usr/bin/osascript", ["-e", script]);
-      const id = stdout.trim();
-      if (id) session.ghosttyTerminalId = id;
-    } catch {
-      // Capture failed — not critical.
-    }
+    void this._bootstrapGhostty(session, false);
   }
 
   private async _bootstrapGhostty(session: AgentSession, injectColor: boolean) {
@@ -381,23 +358,23 @@ return ""`;
     if (color) session.agentColor = color;
 
     try {
-      const { writeFile } = await import("fs/promises");
-      const marker = `bnot-id-${Math.random().toString(36).slice(2, 6)}`;
+      // Write a stable marker to the TTY. With CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+      // (set by hook-installer), Claude Code won't overwrite it.
+      const marker = `bnot · ${session.id.slice(0, 8)}`;
       await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
-      await new Promise((r) => setTimeout(r, 60));
+      await new Promise((r) => setTimeout(r, 30));
 
       const typeColor = color
         ? `tell application "System Events"
   keystroke "/color ${color}"
-  delay 0.04
+  delay 0.02
   key code 36
 end tell
-delay 0.08
+delay 0.03
 `
         : "";
 
-      const script = `
-tell application "System Events"
+      const script = `tell application "System Events"
   set frontApp to name of first process whose frontmost is true
 end tell
 set terminalId to ""
@@ -408,7 +385,7 @@ tell application "Ghostty"
     focus item 1 of matches
   end if
 end tell
-delay 0.05
+delay 0.02
 ${typeColor}tell application frontApp
   activate
 end tell
@@ -417,7 +394,103 @@ return terminalId`;
       const id = stdout.trim();
       if (id) session.ghosttyTerminalId = id;
     } catch {
-      // Terminal bootstrap failed — not critical
+      // Bootstrap failed — not critical
+    }
+  }
+
+  private async enrichSession(sessionId: string) {
+    const session = this.sessions[sessionId];
+    if (!session) return;
+
+    const [tty, gitBranch, worktreeInfo] = await Promise.all([
+      session.terminalPid ? this.lookupTty(session.terminalPid) : null,
+      this.lookupGitBranch(session.workingDirectory),
+      this.lookupGitWorktree(session.workingDirectory),
+    ]);
+
+    const s = this.sessions[sessionId];
+    if (!s) return;
+    if (tty && !s.tty) s.tty = tty;
+    if (gitBranch && !s.gitBranch) s.gitBranch = gitBranch;
+    if (worktreeInfo) {
+      if (!s.gitWorktree) s.gitWorktree = worktreeInfo.worktree;
+      if (!s.gitRepoName) s.gitRepoName = worktreeInfo.repoName;
+    }
+    // Inject /color + capture terminal ID as soon as TTY is available
+    if (s.tty && !this.coloredSessions.has(sessionId)) {
+      this.tryInjectColor(s);
+    }
+    this.emitUpdate();
+  }
+
+  private async lookupTty(pid: number): Promise<string | null> {
+    try {
+      const { stdout } = await exec("/bin/ps", ["-o", "tty=", "-p", String(pid)]);
+      const tty = stdout.trim();
+      return tty && tty !== "??" ? tty : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async lookupGitBranch(cwd: string): Promise<string | null> {
+    try {
+      const { stdout } = await exec("/usr/bin/git", [
+        "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD",
+      ]);
+      const branch = stdout.trim();
+      return branch || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async lookupGitWorktree(
+    cwd: string,
+  ): Promise<{ worktree: string; repoName: string } | null> {
+    try {
+      const [gitDir, commonDir] = await Promise.all([
+        exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-dir"]).then((r) => r.stdout.trim()),
+        exec("/usr/bin/git", ["-C", cwd, "rev-parse", "--git-common-dir"]).then((r) =>
+          r.stdout.trim(),
+        ),
+      ]);
+      if (gitDir !== commonDir) {
+        const worktree = cwd.split("/").pop() ?? cwd;
+        const repoName =
+          commonDir
+            .replace(/\/\.git$/, "")
+            .split("/")
+            .pop() ?? worktree;
+        return { worktree, repoName };
+      }
+    } catch {
+      // not a git repo
+    }
+    return null;
+  }
+
+  /** Clean up pending approval/question when a bridge socket disconnects (e.g. Escape). */
+  handleClientDisconnect(clientFd: number) {
+    for (const [sessionId, fd] of Object.entries(this.pendingApprovalClients)) {
+      if (fd !== clientFd) continue;
+      if (!this.sessions[sessionId]) {
+        delete this.pendingApprovalClients[sessionId];
+        continue;
+      }
+      setTimeout(() => {
+        if (this.pendingApprovalClients[sessionId] !== clientFd) return;
+        delete this.pendingApprovalClients[sessionId];
+        const s = this.sessions[sessionId];
+        if (!s) return;
+        if (s.pendingApproval || s.pendingQuestion) {
+          s.pendingApproval = undefined;
+          s.pendingQuestion = undefined;
+          this.setStatus(sessionId, "active");
+          this.flushUpdate();
+          emit("panelStateChange", { state: "compact" });
+        }
+      }, 500);
     }
   }
 

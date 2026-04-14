@@ -7,9 +7,8 @@ const exec = promisify(execFile);
 const POLL_INTERVAL_MS = 1000;
 
 // Returns the currently-focused Ghostty terminal as "<id>|<workingDirectory>".
-// Empty when Ghostty isn't frontmost / no match. Ghostty's front window title
-// tracks the active tab's title, so we find the terminal whose name matches
-// the front window's name and read both its id and working directory.
+// Empty when Ghostty isn't frontmost / no match. Uses the same
+// `focused terminal of selected tab` path as the bridge for consistent IDs.
 const SCRIPT = `tell application "System Events"
   set frontApp to name of first process whose frontmost is true
 end tell
@@ -18,13 +17,8 @@ if frontApp is not "ghostty" and frontApp is not "Ghostty" then
 end if
 tell application "Ghostty"
   try
-    set fw to front window
-    set fn to name of fw
-    repeat with t in (terminals of fw)
-      if name of t is fn then
-        return (id of t as text) & "|" & (working directory of t as text)
-      end if
-    end repeat
+    set t to focused terminal of selected tab of front window
+    return (id of t as text) & "|" & (working directory of t as text)
   end try
 end tell
 return ""`;
@@ -66,9 +60,11 @@ export class GhosttyFocusWatcher {
         }
       }
       // Fall back to cwd only if no id match (sessions without a captured id yet).
-      if (!matchId && wd) {
+      // Also capture the terminal ID so future lookups use the fast ID path.
+      if (!matchId && wd && terminalId) {
         for (const [id, s] of Object.entries(this.sm.sessions)) {
           if (!s.ghosttyTerminalId && s.workingDirectory === wd) {
+            s.ghosttyTerminalId = terminalId;
             matchId = id;
             break;
           }

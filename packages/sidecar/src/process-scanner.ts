@@ -8,7 +8,7 @@ import type { SessionMode } from "./types.js";
 
 const SCAN_INTERVAL_MS = 2000;
 const LIVENESS_INTERVAL_MS = 500;
-const CPU_ACTIVE_THRESHOLD = 2.0;
+
 const COMPLETION_DELAY_MS = 5000;
 
 function isPidAlive(pid: number): boolean {
@@ -39,7 +39,6 @@ export class ProcessScanner {
   private livenessTimer: ReturnType<typeof setInterval> | null = null;
   private sm: SessionManager;
   private pendingDeletions = new Set<string>();
-  private firstScanDone = false;
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -61,7 +60,7 @@ export class ProcessScanner {
    *  reflects the death without waiting for the next SCAN_INTERVAL tick. */
   private checkLiveness() {
     for (const s of Object.values(this.sm.sessions)) {
-      const pid = s.processPid;
+      const pid = s.processPid ?? s.terminalPid;
       if (!pid) continue;
       try {
         process.kill(pid, 0);
@@ -116,14 +115,6 @@ export class ProcessScanner {
         if (!this.sm.heroSessionId) this.sm.heroSessionId = sessionId;
       }
       // Update live fields (not lastActivity)
-      // Detect idle→working transition to track current task duration
-      const wasIdle = this.sm.sessions[sessionId].cpuPercent < CPU_ACTIVE_THRESHOLD;
-      const isWorking = info.cpuPercent >= CPU_ACTIVE_THRESHOLD;
-      if (wasIdle && isWorking) {
-        this.sm.sessions[sessionId].taskStartedAt = Date.now();
-      } else if (!isWorking) {
-        this.sm.sessions[sessionId].taskStartedAt = undefined;
-      }
       this.sm.setStatus(sessionId, "active");
       this.sm.sessions[sessionId].tty = info.tty ?? undefined;
       this.sm.sessions[sessionId].processPid = info.pid;
@@ -217,12 +208,8 @@ export class ProcessScanner {
       hookSession.tty = info.tty ?? undefined;
       hookSession.processPid = info.pid;
       hookSession.cpuPercent = info.cpuPercent;
-      if (hookSession.tty) {
-        if (this.firstScanDone && !this.sm.coloredSessions.has(hookId)) {
-          this.sm.tryInjectColor(hookSession);
-        } else if (!hookSession.ghosttyTerminalId) {
-          this.sm.tryCaptureTerminalId(hookSession);
-        }
+      if (hookSession.tty && !hookSession.ghosttyTerminalId) {
+        this.sm.tryCaptureTerminalId(hookSession);
       }
     }
 
@@ -230,20 +217,9 @@ export class ProcessScanner {
       const sessionId = `proc-${info.pid}`;
       const session = this.sm.sessions[sessionId];
       if (!session?.tty) continue;
-      if (this.firstScanDone && !this.sm.coloredSessions.has(sessionId)) {
-        this.sm.tryInjectColor(session);
-      } else if (!session.ghosttyTerminalId) {
+      if (!session.ghosttyTerminalId) {
         this.sm.tryCaptureTerminalId(session);
       }
-    }
-
-    // On the first scan, treat all pre-existing sessions as already colored
-    // so we don't re-inject /color for sessions that were alive before launch.
-    if (!this.firstScanDone) {
-      for (const id of Object.keys(this.sm.sessions)) {
-        this.sm.coloredSessions.add(id);
-      }
-      this.firstScanDone = true;
     }
 
     this.updateHeroSession();
@@ -257,13 +233,12 @@ export class ProcessScanner {
       return;
     }
 
-    const active = Object.values(this.sm.sessions).filter((s) => s.status === "active");
-    const busiest = active.reduce(
-      (best, s) => (s.cpuPercent > (best?.cpuPercent ?? 0) ? s : best),
-      null as (typeof active)[0] | null,
+    // Prefer an actively thinking session
+    const thinking = Object.values(this.sm.sessions).find(
+      (s) => s.status === "active" && s.isThinking,
     );
-    if (busiest && busiest.cpuPercent > CPU_ACTIVE_THRESHOLD) {
-      this.sm.heroSessionId = busiest.id;
+    if (thinking) {
+      this.sm.heroSessionId = thinking.id;
       return;
     }
 
@@ -273,7 +248,7 @@ export class ProcessScanner {
     // Pick by most recent activity
     const mostRecent = Object.values(this.sm.sessions).reduce(
       (best, s) => (s.lastActivity > (best?.lastActivity ?? 0) ? s : best),
-      null as (typeof active)[0] | null,
+      null as (typeof this.sm.sessions)[string] | null,
     );
     if (mostRecent) this.sm.heroSessionId = mostRecent.id;
   }

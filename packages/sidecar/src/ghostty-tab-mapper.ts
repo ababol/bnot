@@ -1,8 +1,34 @@
 import { execFile } from "child_process";
+import { writeFile } from "fs/promises";
 import { promisify } from "util";
 import { escapeForAppleScript } from "./terminal-utils.js";
 
 const exec = promisify(execFile);
+
+/**
+ * Focus a Ghostty terminal by its stable UUID (captured at session start).
+ */
+export async function focusGhosttyById(terminalId: string): Promise<boolean> {
+  const script = `tell application "Ghostty"
+  repeat with w in windows
+    repeat with tb in tabs of w
+      repeat with t in terminals of tb
+        if id of t as text is "${escapeForAppleScript(terminalId)}" then
+          focus t
+          return "ok"
+        end if
+      end repeat
+    end repeat
+  end repeat
+  return "no match"
+end tell`;
+  try {
+    const { stdout } = await exec("/usr/bin/osascript", ["-e", script]);
+    return stdout.trim() === "ok";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Focus a Ghostty terminal by matching its working directory.
@@ -60,18 +86,14 @@ async function focusByTty(tty: string, label: string): Promise<boolean> {
   // Validate TTY format to prevent path traversal
   if (!/^ttys\d+$/.test(tty)) return false;
 
-  const marker = label;
   try {
-    // Write OSC sequence to set terminal title to our marker.
-    // Use writeFile instead of shell to avoid command injection.
-    const { writeFile } = await import("fs/promises");
-    await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
+    await writeFile(`/dev/${tty}`, `\x1b]0;${label}\x07`);
     // Give Ghostty a moment to process
     await new Promise((r) => setTimeout(r, 100));
 
     const script = `
 tell application "Ghostty"
-  set matches to every terminal whose name is "${escapeForAppleScript(marker)}"
+  set matches to every terminal whose name is "${escapeForAppleScript(label)}"
   if (count of matches) > 0 then
     focus item 1 of matches
     return "ok"

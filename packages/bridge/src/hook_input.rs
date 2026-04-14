@@ -16,6 +16,7 @@ pub struct ClaudeHookInput {
     pub cwd: Option<String>,
     #[serde(rename = "session_type")]
     pub session_type: Option<String>,
+    pub permission_mode: Option<String>,
     #[serde(rename = "permission_suggestions")]
     pub permission_suggestions: Option<serde_json::Value>,
 }

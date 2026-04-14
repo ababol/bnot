@@ -78,13 +78,21 @@ fn main() {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().to_string_lossy().to_string());
 
     let session_mode = hook.as_ref().and_then(|h| {
-        h.session_type.as_deref().and_then(|t| {
-            if t == "plan" { Some("plan") } else { None }
+        h.permission_mode.as_deref().and_then(|m| match m {
+            "plan" => Some("plan"),
+            "auto" => Some("auto"),
+            "bypassPermissions" => Some("dangerous"),
+            _ => None,
         })
     });
 
     let terminal_app = detect_terminal();
     let parent_pid = get_parent_pid();
+    let ghostty_terminal_id = if terminal_app == Some("Ghostty") {
+        get_ghostty_terminal_id()
+    } else {
+        None
+    };
 
     // Helper: send sessionStart preamble + a typed message on one connection.
     // Halves socket churn vs two separate send_message calls.
@@ -100,6 +108,7 @@ fn main() {
                     working_directory: &cwd,
                     terminal_app,
                     terminal_pid: parent_pid,
+                    ghostty_terminal_id: ghostty_terminal_id.as_deref(),
                 },
             },
             session_mode,
@@ -293,6 +302,7 @@ fn main() {
                         working_directory: &cwd,
                         terminal_app,
                         terminal_pid: parent_pid,
+                        ghostty_terminal_id: ghostty_terminal_id.as_deref(),
                     },
                 },
                 session_mode,
@@ -558,6 +568,18 @@ fn read_hook_input() -> Option<ClaudeHookInput> {
     serde_json::from_str(&buf).ok()
 }
 
+fn get_ghostty_terminal_id() -> Option<String> {
+    let output = std::process::Command::new("/usr/bin/osascript")
+        .args(["-e", r#"tell application "Ghostty"
+  return id of focused terminal of selected tab of front window as text
+end tell"#])
+        .output()
+        .ok()?;
+    if !output.status.success() { return None; }
+    let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if id.is_empty() { None } else { Some(id) }
+}
+
 fn detect_terminal() -> Option<&'static str> {
     std::env::var("TERM_PROGRAM").ok().and_then(|v| {
         let v = v.to_lowercase();
@@ -711,6 +733,8 @@ struct SessionStartPayload<'a> {
     terminal_app: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     terminal_pid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ghostty_terminal_id: Option<&'a str>,
 }
 
 #[derive(Serialize)]

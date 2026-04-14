@@ -30,8 +30,7 @@ export default function CompactView({ notchWidth }: Props) {
     : undefined;
   const now = useTimer();
   const heroIsWorking = heroSession ? isWorking(heroSession, now) : false;
-  const heroColor: BnotColor =
-    parseBnotColor(heroSession?.agentColor) ?? heroTraits?.color ?? "gray";
+  const heroColor: BnotColor = parseBnotColor(heroSession?.agentColor) ?? "gray";
   const heroDot = heroSession
     ? sessionStatusDot(heroSession.status, heroIsWorking, heroSession.sessionMode)
     : undefined;

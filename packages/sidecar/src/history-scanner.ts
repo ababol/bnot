@@ -21,6 +21,11 @@ export class HistoryScanner {
     if (this.timer) clearInterval(this.timer);
   }
 
+  /** Trigger an immediate scan (called when a session ends). */
+  triggerScan() {
+    void this.scan();
+  }
+
   private async scan() {
     try {
       const activeSessionIds = await this.getActiveSessionIds();

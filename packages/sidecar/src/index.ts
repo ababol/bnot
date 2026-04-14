@@ -49,9 +49,23 @@ const sessionManager = new SessionManager();
 const repoFinder = new RepoFinder();
 const worktreeCreator = new WorktreeCreator(repoFinder, sessionManager);
 const usageWatcher = new UsageWatcher();
-const socketServer = new SocketServer((msg, clientFd) => {
-  sessionManager.handleMessage(msg, clientFd);
-});
+const CONTEXT_TRIGGERS = new Set([
+  "sessionStart",
+  "sessionEnd",
+  "stop",
+  "postToolUse",
+  "subagentStop",
+  "userPromptSubmit",
+]);
+const HISTORY_TRIGGERS = new Set(["sessionEnd", "stop"]);
+const socketServer = new SocketServer(
+  (msg, clientFd) => {
+    sessionManager.handleMessage(msg, clientFd);
+    if (CONTEXT_TRIGGERS.has(msg.type)) contextScanner.triggerScan();
+    if (HISTORY_TRIGGERS.has(msg.type)) historyScanner.triggerScan();
+  },
+  (clientFd) => sessionManager.handleClientDisconnect(clientFd),
+);
 const processScanner = new ProcessScanner(sessionManager);
 const contextScanner = new ContextScanner(sessionManager);
 const historyScanner = new HistoryScanner();

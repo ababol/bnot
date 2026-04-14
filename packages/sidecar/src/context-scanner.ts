@@ -1,15 +1,10 @@
-import { execFile } from "child_process";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { promisify } from "util";
-import { CLAUDE_DIR } from "./paths.js";
+import { CLAUDE_DIR, ctxFilePath } from "./paths.js";
 import type { SessionManager } from "./session-manager.js";
 
-const exec = promisify(execFile);
-
 const INITIAL_SCAN_DELAY_MS = 3000;
-const SCAN_INTERVAL_MS = 3000;
-const EXACT_QUERY_INTERVAL_MS = 60000;
+const SCAN_INTERVAL_MS = 30000;
 const TAIL_READ_BYTES = 65536;
 const ESTIMATION_RATIO = 0.85;
 const OVER_RATIO_OFFSET = 0.08;
@@ -25,9 +20,8 @@ interface SessionInfo {
 
 export class ContextScanner {
   private timer: ReturnType<typeof setInterval> | null = null;
-  private exactTimer: ReturnType<typeof setInterval> | null = null;
+  private triggerTimer: ReturnType<typeof setTimeout> | null = null;
   private sm: SessionManager;
-  private exactCounts: Record<string, { used: number; max: number; model: string }> = {};
 
   constructor(sm: SessionManager) {
     this.sm = sm;
@@ -35,17 +29,21 @@ export class ContextScanner {
 
   start() {
     // Delay initial scan to let ProcessScanner populate sessions first
-    setTimeout(() => {
-      this.scan();
-      this.fetchExactContexts();
-    }, INITIAL_SCAN_DELAY_MS);
+    setTimeout(() => this.scan(), INITIAL_SCAN_DELAY_MS);
     this.timer = setInterval(() => this.scan(), SCAN_INTERVAL_MS);
-    this.exactTimer = setInterval(() => this.fetchExactContexts(), EXACT_QUERY_INTERVAL_MS);
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
-    if (this.exactTimer) clearInterval(this.exactTimer);
+    if (this.triggerTimer) clearTimeout(this.triggerTimer);
+  }
+
+  triggerScan() {
+    if (this.triggerTimer) return;
+    this.triggerTimer = setTimeout(() => {
+      this.triggerTimer = null;
+      void this.scan();
+    }, 3000);
   }
 
   private async scan() {
@@ -111,8 +109,8 @@ export class ContextScanner {
           this.sm.sessions[targetId].agentColor = info.agentColor;
         }
 
-        // Use exact count if available, otherwise estimation
-        const exact = this.exactCounts[sessionId];
+        // Prefer exact context from statusLine-written ctx file; fall back to JSONL estimation.
+        const exact = await readCtxFile(sessionId);
         if (exact) {
           this.sm.sessions[targetId].contextTokens = exact.used;
           this.sm.sessions[targetId].maxContextTokens = exact.max;
@@ -203,76 +201,18 @@ export class ContextScanner {
     return info;
   }
 
-  private async fetchExactContexts() {
-    const sessionsDir = path.join(CLAUDE_DIR, "sessions");
-    let files: string[];
-    try {
-      files = await fs.readdir(sessionsDir);
-    } catch {
-      return;
-    }
+}
 
-    for (const file of files) {
-      if (!file.endsWith(".json")) continue;
-      try {
-        const data = await fs.readFile(path.join(sessionsDir, file), "utf-8");
-        const meta = JSON.parse(data);
-        const { pid, sessionId, cwd } = meta;
-        if (!pid || !sessionId || !cwd) continue;
-
-        try {
-          process.kill(pid, 0);
-        } catch {
-          continue;
-        }
-
-        void this.queryExactContext(sessionId, cwd);
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  private async queryExactContext(sessionId: string, cwd: string) {
-    try {
-      const { stdout } = await exec(
-        "claude",
-        [
-          "--print",
-          "/context",
-          "--output-format",
-          "json",
-          "--resume",
-          sessionId,
-          "--no-session-persistence",
-        ],
-        { cwd, timeout: 10000, env: process.env },
-      );
-
-      const jsonStart = stdout.indexOf("{");
-      if (jsonStart === -1) return;
-      const obj = JSON.parse(stdout.substring(jsonStart));
-      const resultText: string = obj.result ?? "";
-
-      const tokenMatch = resultText.match(
-        /([\d.]+)k?\s*\/\s*([\d.]+)([km])\s*tokens?\s*\((\d+)%\)/i,
-      );
-      if (!tokenMatch) return;
-
-      const used = Math.floor(parseFloat(tokenMatch[1]) * 1000);
-      const maxUnit = tokenMatch[3].toLowerCase();
-      const maxVal = parseFloat(tokenMatch[2]) * (maxUnit === "m" ? 1_000_000 : 1_000);
-
-      let model = "";
-      const modelMatch = resultText.match(/\*\*Model:\*\*\s*([\w.-]+)/);
-      if (modelMatch) model = modelMatch[1];
-
-      if (used > 0 && maxVal > 0) {
-        this.exactCounts[sessionId] = { used, max: maxVal, model };
-      }
-    } catch {
-      // Timeout or claude not found — skip
-    }
+async function readCtxFile(sessionId: string): Promise<{ used: number; max: number } | null> {
+  try {
+    const raw = await fs.readFile(ctxFilePath(sessionId), "utf-8");
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    const max = typeof data.context_window_size === "number" ? data.context_window_size : 0;
+    const pct = typeof data.used_percentage === "number" ? data.used_percentage : null;
+    if (max <= 0 || pct === null) return null;
+    return { used: Math.floor((pct / 100) * max), max };
+  } catch {
+    return null;
   }
 }
 

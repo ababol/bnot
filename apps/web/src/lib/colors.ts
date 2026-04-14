@@ -49,7 +49,6 @@ export type BnotEars = "both" | "left" | "right" | "floppy";
 export type BnotEyes = "normal" | "winkLeft" | "winkRight";
 
 export interface BnotTraits {
-  color: BnotColor;
   hat: BnotHat;
   ears: BnotEars;
   eyes: BnotEyes;
@@ -58,18 +57,6 @@ export interface BnotTraits {
 const HATS: BnotHat[] = ["none", "cap", "horn", "crown"];
 const EARS: BnotEars[] = ["both", "left", "right", "floppy"];
 const EYES: BnotEyes[] = ["normal", "winkLeft", "winkRight"];
-const BNOT_COLORS: BnotColor[] = [
-  "green",
-  "blue",
-  "orange",
-  "cyan",
-  "purple",
-  "pink",
-  "yellow",
-  "lime",
-  "white",
-  "lavender",
-];
 
 function djb2(s: string): number {
   let h = 5381;
@@ -95,7 +82,6 @@ function hatFromKeywords(branch: string): BnotHat | null {
 export function bnotTraitsFromId(id: string, branch?: string): BnotTraits {
   const h = djb2(id);
   return {
-    color: BNOT_COLORS[h % BNOT_COLORS.length],
     hat: (branch ? hatFromKeywords(branch) : null) ?? HATS[(h >> 4) % HATS.length],
     ears: EARS[(h >> 8) % EARS.length],
     eyes: EYES[(h >> 12) % EYES.length],

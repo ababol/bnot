@@ -49,7 +49,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     : now - (session.taskStartedAt ?? session.startedAt);
   const bnotId = session.workingDirectory + (suffix ?? "");
   const traits = bnotTraitsFromId(bnotId, suffix ?? undefined);
-  const bnotColor: BnotColor = parseBnotColor(session.agentColor) ?? traits.color;
+  const bnotColor: BnotColor = parseBnotColor(session.agentColor) ?? "gray";
   const working = isWorking(session, now);
   const dot = sessionStatusDot(session.status, working, session.sessionMode);
   const approval = session.pendingApproval;

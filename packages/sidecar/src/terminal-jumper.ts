@@ -1,6 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { focusGhosttyTerminal } from "./ghostty-tab-mapper.js";
+import { focusGhosttyById, focusGhosttyTerminal } from "./ghostty-tab-mapper.js";
 import { emit } from "./ipc.js";
 import type { AgentSession } from "./types.js";
 
@@ -20,8 +20,12 @@ export async function jumpToSession(session: AgentSession) {
 }
 
 async function jumpToGhostty(session: AgentSession) {
-  // Use Ghostty's native AppleScript API to focus the terminal.
-  // Pass TTY for precise matching when multiple terminals share the same directory.
+  // Use Ghostty terminal ID captured by the bridge at session start.
+  if (session.ghosttyTerminalId) {
+    const focused = await focusGhosttyById(session.ghosttyTerminalId);
+    if (focused) return;
+  }
+  // Fallback: match by working directory
   const focused = await focusGhosttyTerminal(
     session.workingDirectory,
     session.tty,
@@ -29,7 +33,6 @@ async function jumpToGhostty(session: AgentSession) {
     session.gitWorktree ?? undefined,
   );
   if (!focused) {
-    // Fallback: just activate Ghostty
     emit("tauriCommand", { method: "activate_app", params: { bundleId: "com.mitchellh.ghostty" } });
   }
 }

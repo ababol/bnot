@@ -93,6 +93,7 @@ export interface SessionStartPayload {
   workingDirectory: string;
   terminalApp?: string;
   terminalPid?: number;
+  ghosttyTerminalId?: string;
 }
 
 export interface SessionEndPayload {

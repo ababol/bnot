@@ -8,3 +8,5 @@ export const SOCKET_PATH = path.join(RUNTIME_DIR, "bnot.sock");
 export const PID_PATH = path.join(RUNTIME_DIR, "bnot.pid");
 export const USAGE_PATH = path.join(RUNTIME_DIR, "usage.json");
 export const STATUSLINE_PATH = path.join(RUNTIME_DIR, "statusline.sh");
+export const ctxFilePath = (sessionId: string) =>
+  path.join(RUNTIME_DIR, `ctx-${sessionId}.json`);

@@ -4,16 +4,19 @@ import { PID_PATH, RUNTIME_DIR, SOCKET_PATH } from "./paths.js";
 import type { ApprovalResponse, SocketMessage } from "./types.js";
 
 type MessageHandler = (msg: SocketMessage, clientFd: number) => void;
+type DisconnectHandler = (clientFd: number) => void;
 
 export class SocketServer {
   private server: net.Server | null = null;
   private clients = new Map<net.Socket, string>(); // socket -> buffer
   private onMessage: MessageHandler;
+  private onDisconnect: DisconnectHandler | null = null;
   private clientSockets = new Map<number, net.Socket>(); // fd -> socket
   private nextClientId = 1;
 
-  constructor(onMessage: MessageHandler) {
+  constructor(onMessage: MessageHandler, onDisconnect?: DisconnectHandler) {
     this.onMessage = onMessage;
+    this.onDisconnect = onDisconnect ?? null;
   }
 
   start() {
@@ -95,11 +98,13 @@ export class SocketServer {
     socket.on("close", () => {
       this.clients.delete(socket);
       this.clientSockets.delete(clientId);
+      this.onDisconnect?.(clientId);
     });
 
     socket.on("error", () => {
       this.clients.delete(socket);
       this.clientSockets.delete(clientId);
+      this.onDisconnect?.(clientId);
     });
   }
 }

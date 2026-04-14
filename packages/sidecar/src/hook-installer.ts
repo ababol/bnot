@@ -96,6 +96,11 @@ export async function installHooksIfNeeded(bridgePath?: string) {
   }
   settings.hooks = newHooks;
 
+  // Disable Claude Code's terminal title so bnot markers persist for tab identification
+  const env = (settings.env ?? {}) as Record<string, string>;
+  env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
+  settings.env = env;
+
   try {
     await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
     process.stderr.write("[hookInstaller] hooks installed to ~/.claude/settings.json\n");
@@ -224,7 +229,7 @@ export async function repairHooks(): Promise<HookHealthReport> {
 
 // ── Status line (usage stats) ────────────────────────────────────────────────
 
-import { STATUSLINE_PATH, USAGE_PATH } from "./paths.js";
+import { RUNTIME_DIR, STATUSLINE_PATH, USAGE_PATH } from "./paths.js";
 
 export async function installStatusLineIfNeeded(): Promise<void> {
   let settings: Record<string, unknown>;
@@ -250,6 +255,14 @@ export async function installStatusLineIfNeeded(): Promise<void> {
     `  seven_day: (.rate_limits.seven_day // null),`,
     `  cached_at: (now * 1000 | floor)`,
     `}' > "${USAGE_PATH}" 2>/dev/null || true`,
+    'session_id=$(echo "$input" | jq -r \'.session_id // empty\' 2>/dev/null)',
+    'if [ -n "$session_id" ]; then',
+    `  echo "$input" | jq -c '{`,
+    `    used_percentage: (.context_window.used_percentage // null),`,
+    `    context_window_size: (.context_window.context_window_size // 0),`,
+    `    cached_at: (now * 1000 | floor)`,
+    `  }' > "${RUNTIME_DIR}/ctx-` + '${session_id}' + `.json" 2>/dev/null || true`,
+    'fi',
   ].join("\n") + "\n";
 
   try {
@@ -260,7 +273,7 @@ export async function installStatusLineIfNeeded(): Promise<void> {
     return;
   }
 
-  (settings as Record<string, unknown>).statusLine = { type: "command", command: STATUSLINE_PATH };
+  (settings as Record<string, unknown>).statusLine = { type: "command", command: STATUSLINE_PATH, async: true };
   try {
     await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
     process.stderr.write("[hookInstaller] statusLine installed\n");
