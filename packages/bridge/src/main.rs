@@ -86,6 +86,12 @@ fn main() {
         })
     });
 
+    // Subagent hooks create phantom sessions in the UI. The parent session
+    // already tracks subagent activity via SubagentStart/SubagentStop events.
+    if hook.as_ref().and_then(|h| h.session_type.as_deref()).is_some_and(|t| t == "agent") {
+        return;
+    }
+
     let terminal_app = detect_terminal();
     let parent_pid = get_parent_pid();
     let ghostty_terminal_id = if terminal_app == Some("Ghostty") {

@@ -63,7 +63,21 @@ export async function installHooksIfNeeded(bridgePath?: string) {
       ),
     );
   });
+  // Even if hooks are already installed, ensure the env var is set.
+  // It may be missing if hooks were installed by an older bnot version that
+  // didn't write it, and the installer returned early on subsequent runs.
+  const envSection = (settings.env ?? {}) as Record<string, string>;
   if (allInstalled && !process.env._BNOT_FORCE_HOOK_INSTALL) {
+    if (!envSection.CLAUDE_CODE_DISABLE_TERMINAL_TITLE) {
+      envSection.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
+      settings.env = envSection;
+      try {
+        await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+        process.stderr.write("[hookInstaller] patched missing CLAUDE_CODE_DISABLE_TERMINAL_TITLE\n");
+      } catch {
+        // ignore
+      }
+    }
     process.stderr.write("[hookInstaller] hooks already installed\n");
     return;
   }
@@ -97,9 +111,8 @@ export async function installHooksIfNeeded(bridgePath?: string) {
   settings.hooks = newHooks;
 
   // Disable Claude Code's terminal title so bnot markers persist for tab identification
-  const env = (settings.env ?? {}) as Record<string, string>;
-  env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
-  settings.env = env;
+  envSection.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
+  settings.env = envSection;
 
   try {
     await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
