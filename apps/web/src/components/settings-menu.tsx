@@ -89,11 +89,17 @@ export default function SettingsMenu({ onAction }: Props) {
       {usageStats && (
         <div className="px-3 py-1 text-xs text-text-dim">
           {usageStats.fiveHour && (
-            <span>5h: {Math.round(usageStats.fiveHour.usedPercent)}% · resets {formatTimeUntil(usageStats.fiveHour.resetsAt)}</span>
+            <span>
+              5h: {Math.round(usageStats.fiveHour.usedPercent)}% · resets{" "}
+              {formatTimeUntil(usageStats.fiveHour.resetsAt)}
+            </span>
           )}
           {usageStats.fiveHour && usageStats.sevenDay && <span className="mx-1">·</span>}
           {usageStats.sevenDay && (
-            <span>7d: {Math.round(usageStats.sevenDay.usedPercent)}% · resets {formatTimeUntil(usageStats.sevenDay.resetsAt)}</span>
+            <span>
+              7d: {Math.round(usageStats.sevenDay.usedPercent)}% · resets{" "}
+              {formatTimeUntil(usageStats.sevenDay.resetsAt)}
+            </span>
           )}
         </div>
       )}
@@ -124,11 +130,17 @@ export default function SettingsMenu({ onAction }: Props) {
         disabled={updateStatus === "checking" || updateStatus === "downloading"}
         className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-text-secondary hover:bg-white/10 disabled:opacity-50"
       >
-        <span className="w-3 text-text-dim">
-          {updateStatus === "up-to-date" ? "\u2713" : ""}
-        </span>
+        <span className="w-3 text-text-dim">{updateStatus === "up-to-date" ? "\u2713" : ""}</span>
         <span>
-          {{ checking: "Checking...", downloading: "Updating...", "up-to-date": "Up to date", error: "Update failed", idle: "Check for updates" }[updateStatus]}
+          {
+            {
+              checking: "Checking...",
+              downloading: "Updating...",
+              "up-to-date": "Up to date",
+              error: "Update failed",
+              idle: "Check for updates",
+            }[updateStatus]
+          }
         </span>
       </button>
       <div className="my-1 h-px bg-white/10" />

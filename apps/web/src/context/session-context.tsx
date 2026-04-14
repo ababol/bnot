@@ -1,5 +1,11 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from "react";
-import type { AgentSession, HistorySession, HookHealthReport, PanelState, UsageSnapshot } from "./types";
+import type {
+  AgentSession,
+  HistorySession,
+  HookHealthReport,
+  PanelState,
+  UsageSnapshot,
+} from "./types";
 
 interface SessionState {
   sessions: Record<string, AgentSession>;

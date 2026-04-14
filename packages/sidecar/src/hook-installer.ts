@@ -183,7 +183,6 @@ export async function checkHookHealth(): Promise<HookHealthReport> {
       })
       .map(([event]) => event);
 
-
     if (missingEvents.length > 0) {
       errors.push({ kind: "hooksMissing", events: missingEvents });
     }
@@ -247,23 +246,24 @@ export async function installStatusLineIfNeeded(): Promise<void> {
   }
 
   // Write the script
-  const script = [
-    "#!/bin/bash",
-    "input=$(cat)",
-    `echo "$input" | jq -c '{`,
-    `  five_hour: (.rate_limits.five_hour // null),`,
-    `  seven_day: (.rate_limits.seven_day // null),`,
-    `  cached_at: (now * 1000 | floor)`,
-    `}' > "${USAGE_PATH}" 2>/dev/null || true`,
-    'session_id=$(echo "$input" | jq -r \'.session_id // empty\' 2>/dev/null)',
-    'if [ -n "$session_id" ]; then',
-    `  echo "$input" | jq -c '{`,
-    `    used_percentage: (.context_window.used_percentage // null),`,
-    `    context_window_size: (.context_window.context_window_size // 0),`,
-    `    cached_at: (now * 1000 | floor)`,
-    `  }' > "${RUNTIME_DIR}/ctx-` + '${session_id}' + `.json" 2>/dev/null || true`,
-    'fi',
-  ].join("\n") + "\n";
+  const script =
+    [
+      "#!/bin/bash",
+      "input=$(cat)",
+      `echo "$input" | jq -c '{`,
+      `  five_hour: (.rate_limits.five_hour // null),`,
+      `  seven_day: (.rate_limits.seven_day // null),`,
+      `  cached_at: (now * 1000 | floor)`,
+      `}' > "${USAGE_PATH}" 2>/dev/null || true`,
+      "session_id=$(echo \"$input\" | jq -r '.session_id // empty' 2>/dev/null)",
+      'if [ -n "$session_id" ]; then',
+      `  echo "$input" | jq -c '{`,
+      `    used_percentage: (.context_window.used_percentage // null),`,
+      `    context_window_size: (.context_window.context_window_size // 0),`,
+      `    cached_at: (now * 1000 | floor)`,
+      `  }' > "${RUNTIME_DIR}/ctx-` + "${session_id}" + `.json" 2>/dev/null || true`,
+      "fi",
+    ].join("\n") + "\n";
 
   try {
     await fs.mkdir(path.dirname(STATUSLINE_PATH), { recursive: true });
@@ -273,7 +273,11 @@ export async function installStatusLineIfNeeded(): Promise<void> {
     return;
   }
 
-  (settings as Record<string, unknown>).statusLine = { type: "command", command: STATUSLINE_PATH, async: true };
+  (settings as Record<string, unknown>).statusLine = {
+    type: "command",
+    command: STATUSLINE_PATH,
+    async: true,
+  };
   try {
     await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
     process.stderr.write("[hookInstaller] statusLine installed\n");

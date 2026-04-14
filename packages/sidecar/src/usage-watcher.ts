@@ -18,8 +18,7 @@ function parseWindow(raw: unknown): UsageWindow | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
   // Canonical shape: { used_percentage, resets_at }
-  const usedPercent =
-    typeof obj.used_percentage === "number" ? obj.used_percentage : null;
+  const usedPercent = typeof obj.used_percentage === "number" ? obj.used_percentage : null;
   const resetsAt =
     typeof obj.resets_at === "string"
       ? new Date(obj.resets_at).getTime()
@@ -52,9 +51,11 @@ export class UsageWatcher {
     if (this.watcher) return;
 
     // Emit current value immediately if file already exists
-    readSnapshot().then((snap) => {
-      if (snap) emit("usageStats", snap);
-    }).catch(() => {});
+    readSnapshot()
+      .then((snap) => {
+        if (snap) emit("usageStats", snap);
+      })
+      .catch(() => {});
 
     try {
       this.watcher = fs.watch(USAGE_PATH, () => {

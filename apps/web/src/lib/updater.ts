@@ -3,9 +3,7 @@ import { check } from "@tauri-apps/plugin-updater";
 
 export type UpdateStatus = "idle" | "checking" | "downloading" | "up-to-date" | "error";
 
-export async function runUpdateCheck(
-  onStatus?: (status: UpdateStatus) => void,
-): Promise<boolean> {
+export async function runUpdateCheck(onStatus?: (status: UpdateStatus) => void): Promise<boolean> {
   onStatus?.("checking");
   try {
     const update = await check();

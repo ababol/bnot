@@ -436,7 +436,11 @@ return terminalId`;
   private async lookupGitBranch(cwd: string): Promise<string | null> {
     try {
       const { stdout } = await exec("/usr/bin/git", [
-        "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD",
+        "-C",
+        cwd,
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD",
       ]);
       const branch = stdout.trim();
       return branch || null;

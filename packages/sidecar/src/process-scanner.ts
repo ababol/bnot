@@ -87,7 +87,6 @@ export class ProcessScanner {
       if (s.processPid != null) hookByClaudePid[s.processPid] = id;
     }
 
-
     // Add / update proc-<pid> sessions. Skip any pid that's already
     // represented by a hook session (see comment above).
     for (const info of activePids) {

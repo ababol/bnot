@@ -200,7 +200,6 @@ export class ContextScanner {
 
     return info;
   }
-
 }
 
 async function readCtxFile(sessionId: string): Promise<{ used: number; max: number } | null> {

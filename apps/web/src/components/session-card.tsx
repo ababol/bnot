@@ -71,9 +71,7 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
     if (currentQIdx !== 0) setCurrentQIdx(0);
   }
 
-  const allQs: QuestionItem[] = question
-    ? question.allQuestions ?? [question]
-    : [];
+  const allQs: QuestionItem[] = question ? (question.allQuestions ?? [question]) : [];
 
   const isSingleSelectSingle = allQs.length === 1 && !allQs[0]?.multiSelect;
   const currentQ = allQs[currentQIdx];
@@ -304,26 +302,46 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
                 {(() => {
                   const selected = selectedMap[currentQIdx];
                   return currentQ.options.map((option, i) => {
-                  const isSelected = selected?.has(i) ?? false;
-                  if (currentQ.multiSelect) {
+                    const isSelected = selected?.has(i) ?? false;
+                    if (currentQ.multiSelect) {
+                      return (
+                        <button
+                          key={option}
+                          onClick={handleToggle(currentQIdx, i)}
+                          className={`flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none px-3 py-2.5 text-left transition-colors ${
+                            isSelected
+                              ? "bg-bnot-cyan/25 hover:bg-bnot-cyan/30"
+                              : "bg-bnot-cyan/10 hover:bg-bnot-cyan/20"
+                          }`}
+                        >
+                          <span
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] transition-colors ${
+                              isSelected
+                                ? "border-bnot-cyan bg-bnot-cyan text-black"
+                                : "border-bnot-cyan/40 bg-transparent text-transparent"
+                            }`}
+                          >
+                            ✓
+                          </span>
+                          <div className="flex-1">
+                            <div className="text-[12px] font-medium text-white">{option}</div>
+                            {currentQ.optionDescriptions?.[i] && (
+                              <div className="text-[10px] text-white/50">
+                                {currentQ.optionDescriptions[i]}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    }
                     return (
                       <button
                         key={option}
-                        onClick={handleToggle(currentQIdx, i)}
-                        className={`flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none px-3 py-2.5 text-left transition-colors ${
-                          isSelected
-                            ? "bg-bnot-cyan/25 hover:bg-bnot-cyan/30"
-                            : "bg-bnot-cyan/10 hover:bg-bnot-cyan/20"
-                        }`}
+                        onClick={handleSingleSelect(currentQIdx, i)}
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-bnot-cyan/10 px-3 py-2.5 text-left hover:bg-bnot-cyan/20"
                       >
-                        <span
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] transition-colors ${
-                            isSelected
-                              ? "border-bnot-cyan bg-bnot-cyan text-black"
-                              : "border-bnot-cyan/40 bg-transparent text-transparent"
-                          }`}
-                        >
-                          ✓
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-bnot-cyan/30 text-[10px] font-bold text-bnot-cyan">
+                          {isSingleSelectSingle ? i + 1 : "›"}
                         </span>
                         <div className="flex-1">
                           <div className="text-[12px] font-medium text-white">{option}</div>
@@ -333,30 +351,10 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
                             </div>
                           )}
                         </div>
+                        <span className="text-[11px] text-white/30">{"\u203A"}</span>
                       </button>
                     );
-                  }
-                  return (
-                    <button
-                      key={option}
-                      onClick={handleSingleSelect(currentQIdx, i)}
-                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-none bg-bnot-cyan/10 px-3 py-2.5 text-left hover:bg-bnot-cyan/20"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-bnot-cyan/30 text-[10px] font-bold text-bnot-cyan">
-                        {isSingleSelectSingle ? i + 1 : "›"}
-                      </span>
-                      <div className="flex-1">
-                        <div className="text-[12px] font-medium text-white">{option}</div>
-                        {currentQ.optionDescriptions?.[i] && (
-                          <div className="text-[10px] text-white/50">
-                            {currentQ.optionDescriptions[i]}
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-white/30">{"\u203A"}</span>
-                    </button>
-                  );
-                });
+                  });
                 })()}
               </div>
 
