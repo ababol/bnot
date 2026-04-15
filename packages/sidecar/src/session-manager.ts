@@ -30,6 +30,7 @@ export class SessionManager {
   coloredSessions = new Set<string>();
   coloredTtys = new Set<string>();
   private completedAt: Record<string, number> = {};
+  idleSessions = new Set<string>();
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -134,6 +135,8 @@ export class SessionManager {
       case "preToolUse": {
         const p = payload.preToolUse;
         if (!p) break;
+        // Discard stale events from a completed turn that arrived after sessionEnd
+        if (this.idleSessions.has(sessionId)) return;
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].currentTool = p.toolName;
@@ -204,6 +207,7 @@ export class SessionManager {
 
       case "userPromptSubmit": {
         this.ensureSession(sessionId, timestamp);
+        this.idleSessions.delete(sessionId);
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].taskStartedAt = Date.now();
         this.setStatus(sessionId, "active");
@@ -219,6 +223,7 @@ export class SessionManager {
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].currentTool = undefined;
+        this.sessions[sessionId].isThinking = false;
         this.sessions[sessionId].pendingApproval = undefined;
         this.sessions[sessionId].pendingQuestion = undefined;
         if (
@@ -258,6 +263,7 @@ export class SessionManager {
         this.sessions[sessionId].isThinking = false;
         this.sessions[sessionId].currentTool = undefined;
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
+        this.idleSessions.add(sessionId);
         delete this.pendingApprovalClients[sessionId];
         break;
       }
@@ -384,17 +390,10 @@ export class SessionManager {
       await writeFile(`/dev/${tty}`, `\x1b]0;${marker}\x07`);
       await new Promise((r) => setTimeout(r, 30));
 
-      const typeColor = color
+      // When injecting color: focus terminal, type /color, restore focus.
+      // When only capturing ID: query Ghostty without focusing.
+      const script = color
         ? `tell application "System Events"
-  keystroke "/color ${color}"
-  delay 0.02
-  key code 36
-end tell
-delay 0.03
-`
-        : "";
-
-      const script = `tell application "System Events"
   set frontApp to name of first process whose frontmost is true
 end tell
 set terminalId to ""
@@ -406,8 +405,22 @@ tell application "Ghostty"
   end if
 end tell
 delay 0.02
-${typeColor}tell application frontApp
+tell application "System Events"
+  keystroke "/color ${color}"
+  delay 0.02
+  key code 36
+end tell
+delay 0.03
+tell application frontApp
   activate
+end tell
+return terminalId`
+        : `set terminalId to ""
+tell application "Ghostty"
+  set matches to every terminal whose name is "${marker}"
+  if (count of matches) > 0 then
+    set terminalId to id of (item 1 of matches) as text
+  end if
 end tell
 return terminalId`;
       const { stdout } = await exec("/usr/bin/osascript", ["-e", script]);

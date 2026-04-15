@@ -78,11 +78,11 @@ fn main() {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().to_string_lossy().to_string());
 
     let session_mode = hook.as_ref().and_then(|h| {
-        h.permission_mode.as_deref().and_then(|m| match m {
-            "plan" => Some("plan"),
-            "auto" => Some("auto"),
-            "bypassPermissions" => Some("dangerous"),
-            _ => None,
+        h.permission_mode.as_deref().map(|m| match m {
+            "plan" => "plan",
+            "auto" => "auto",
+            "bypassPermissions" => "dangerous",
+            _ => "normal",
         })
     });
 

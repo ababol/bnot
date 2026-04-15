@@ -51,6 +51,7 @@ const QUESTION_PIXELS: Array<[number, number]> = [
 ];
 
 const SPIN_INTERVAL_MS = 180;
+const PLAN_INTERVAL_MS = 200;
 const ZZZ_INTERVAL_MS = 400;
 
 // Small "z" glyphs staggered diagonally for the idle "sleeping" dot.
@@ -67,8 +68,9 @@ export default function StatusIndicator({ dot, size = "sm" }: Props) {
   const [tick, setTick] = useState(0);
   const { display, canvas, grid } = SIZE[size];
 
-  const animate = dot === "working" || dot === "idle";
-  const intervalMs = dot === "working" ? SPIN_INTERVAL_MS : ZZZ_INTERVAL_MS;
+  const animate = dot === "working" || dot === "idle" || dot === "planning";
+  const intervalMs =
+    dot === "working" ? SPIN_INTERVAL_MS : dot === "planning" ? PLAN_INTERVAL_MS : ZZZ_INTERVAL_MS;
 
   useEffect(() => {
     if (!animate) return;
@@ -142,13 +144,22 @@ export default function StatusIndicator({ dot, size = "sm" }: Props) {
     } else if (dot === "waiting") {
       for (const [x, y] of QUESTION_PIXELS) fillSingle(x, y);
     } else if (dot === "planning") {
-      // Three vertical dots, center row pulses via alpha
-      fillSingle(4, 3);
-      fillSingle(5, 3);
-      fillSingle(4, 5);
-      fillSingle(5, 5);
-      fillSingle(4, 7);
-      fillSingle(5, 7);
+      // Three bars light up one at a time in sequence
+      const bars = [
+        { y: 2, x0: 2, x1: 7 },
+        { y: 5, x0: 2, x1: 6 },
+        { y: 8, x0: 2, x1: 5 },
+      ];
+      const active = tick % 9; // 0-2: bar0, 3-5: bar1, 6-8: bar2
+      for (let b = 0; b < 3; b++) {
+        const barStart = b * 3;
+        const frame = active - barStart;
+        // Ramp up then hold: 0→0.3, 1→0.7, 2→1.0, else dim
+        const alpha =
+          frame === 2 ? 0.9 : frame === 1 ? 0.6 : frame === 0 ? 0.35 : 0.1;
+        const { y, x0, x1 } = bars[b];
+        for (let x = x0; x <= x1; x++) fillSingle(x, y, alpha);
+      }
     } else {
       // idle: three little "z"s staggered diagonally, breathing softly
       for (const [col, row, phase] of ZZZ_POSITIONS) {

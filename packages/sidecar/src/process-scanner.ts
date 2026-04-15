@@ -156,6 +156,7 @@ export class ProcessScanner {
           const tty = this.sm.sessions[id]?.tty;
           delete this.sm.sessions[id];
           this.pendingDeletions.delete(id);
+          this.sm.idleSessions.delete(id);
           // Evict TTY from coloredTtys if no remaining session uses it,
           // so new sessions on reused TTYs still get color injection.
           if (tty && !Object.values(this.sm.sessions).some((s) => s.tty === tty)) {
