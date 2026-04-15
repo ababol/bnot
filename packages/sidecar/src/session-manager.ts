@@ -28,6 +28,7 @@ export class SessionManager {
   focusedSessionId: string | null = null;
   pendingApprovalClients: Record<string, number> = {};
   coloredSessions = new Set<string>();
+  coloredTtys = new Set<string>();
   private completedAt: Record<string, number> = {};
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -73,7 +74,10 @@ export class SessionManager {
   }
 
   handleMessage(msg: SocketMessage, clientFd: number) {
-    const { type, sessionId, timestamp, payload, sessionMode } = msg;
+    const { type, sessionId, timestamp, payload, sessionMode, sessionType } = msg;
+
+    // Defense-in-depth: the bridge also filters this, but it's a separate process.
+    if (sessionType === "agent") return;
 
     switch (type) {
       case "sessionStart": {
@@ -207,9 +211,7 @@ export class SessionManager {
         this.heroSessionId = sessionId;
         // User is typing in Ghostty right now — inject /color if not yet set
         const s = this.sessions[sessionId];
-        if (s.tty && !this.coloredSessions.has(sessionId)) {
-          this.tryInjectColor(s);
-        }
+        if (s.tty) this.tryInjectColor(s);
         break;
       }
 
@@ -348,12 +350,17 @@ export class SessionManager {
    */
   tryInjectColor(session: AgentSession) {
     if (this.coloredSessions.has(session.id)) return;
+    this.coloredSessions.add(session.id);
+
     if (session.agentColor && session.ghosttyTerminalId) {
-      this.coloredSessions.add(session.id);
+      if (session.tty) this.coloredTtys.add(session.tty);
       return;
     }
-    const injectColor = !session.agentColor;
-    this.coloredSessions.add(session.id);
+
+    // Skip if this TTY already has a colored session (e.g. subagent sharing parent terminal)
+    const ttyAlreadyColored = !!session.tty && this.coloredTtys.has(session.tty);
+    const injectColor = !session.agentColor && !ttyAlreadyColored;
+    if (session.tty) this.coloredTtys.add(session.tty);
     void this._bootstrapGhostty(session, injectColor);
   }
 
@@ -430,9 +437,7 @@ return terminalId`;
       if (!s.gitRepoName) s.gitRepoName = worktreeInfo.repoName;
     }
     // Inject /color + capture terminal ID as soon as TTY is available
-    if (s.tty && !this.coloredSessions.has(sessionId)) {
-      this.tryInjectColor(s);
-    }
+    if (s.tty) this.tryInjectColor(s);
     this.emitUpdate();
   }
 

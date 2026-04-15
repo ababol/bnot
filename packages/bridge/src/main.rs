@@ -86,9 +86,11 @@ fn main() {
         })
     });
 
+    let session_type = hook.as_ref().and_then(|h| h.session_type.as_deref());
+
     // Subagent hooks create phantom sessions in the UI. The parent session
     // already tracks subagent activity via SubagentStart/SubagentStop events.
-    if hook.as_ref().and_then(|h| h.session_type.as_deref()).is_some_and(|t| t == "agent") {
+    if session_type.is_some_and(|t| t == "agent") {
         return;
     }
 
@@ -118,6 +120,7 @@ fn main() {
                 },
             },
             session_mode,
+            session_type,
         };
         let mut stream = match UnixStream::connect(socket_path()) {
             Ok(s) => s,
@@ -142,6 +145,7 @@ fn main() {
                     user_prompt_submit: UserPromptSubmitPayload {},
                 },
                 session_mode,
+                session_type,
             });
         }
 
@@ -267,6 +271,7 @@ fn main() {
                     },
                 },
                 session_mode,
+                session_type,
             });
         }
 
@@ -312,6 +317,7 @@ fn main() {
                     },
                 },
                 session_mode,
+                session_type,
             };
 
             let perm_request = SocketMessage {
@@ -328,6 +334,7 @@ fn main() {
                     },
                 },
                 session_mode,
+                session_type,
             };
 
             if let Some(resp) = send_and_wait(&session_start, &perm_request) {
@@ -424,6 +431,7 @@ fn main() {
                     },
                 },
                 session_mode,
+                session_type,
             });
         }
 
@@ -442,6 +450,7 @@ fn main() {
                     },
                 },
                 session_mode,
+                session_type,
             });
         }
 
@@ -456,6 +465,7 @@ fn main() {
                     },
                 },
                 session_mode,
+                session_type,
             });
         }
 
@@ -470,6 +480,7 @@ fn main() {
                     },
                 },
                 session_mode,
+                session_type,
             });
         }
 
@@ -480,6 +491,7 @@ fn main() {
                 timestamp: &now_iso(),
                 payload: Payload::StopFailure { stop_failure: EmptyPayload {} },
                 session_mode,
+                session_type,
             });
         }
 
@@ -490,6 +502,7 @@ fn main() {
                 timestamp: &now_iso(),
                 payload: Payload::SubagentStart { subagent_start: EmptyPayload {} },
                 session_mode,
+                session_type,
             });
         }
 
@@ -500,6 +513,7 @@ fn main() {
                 timestamp: &now_iso(),
                 payload: Payload::SubagentStop { subagent_stop: EmptyPayload {} },
                 session_mode,
+                session_type,
             });
         }
 
@@ -510,6 +524,7 @@ fn main() {
                 timestamp: &now_iso(),
                 payload: Payload::PostToolUseFailure { post_tool_use_failure: EmptyPayload {} },
                 session_mode,
+                session_type,
             });
         }
 
@@ -520,6 +535,7 @@ fn main() {
                 timestamp: &now_iso(),
                 payload: Payload::PermissionDenied { permission_denied: EmptyPayload {} },
                 session_mode,
+                session_type,
             });
         }
 
@@ -530,6 +546,7 @@ fn main() {
                 timestamp: &now_iso(),
                 payload: Payload::PreCompact { pre_compact: EmptyPayload {} },
                 session_mode,
+                session_type,
             });
         }
 
@@ -665,6 +682,8 @@ struct SocketMessage<'a> {
     payload: Payload<'a>,
     #[serde(skip_serializing_if = "Option::is_none")]
     session_mode: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_type: Option<&'a str>,
 }
 
 #[derive(Serialize)]

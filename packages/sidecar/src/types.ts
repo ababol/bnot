@@ -23,6 +23,7 @@ export interface SocketMessage {
   timestamp: string;
   payload: MessagePayload;
   sessionMode?: string;
+  sessionType?: string;
 }
 
 export type MessagePayload = {
