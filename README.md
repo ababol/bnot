@@ -32,11 +32,13 @@ Bnot turns your MacBook's notch into a live radar for every Claude Code session 
 - **Context window gauge** — battery-style fill inside the pixel-bnot. Green, yellow, red. You'll see the wall before you hit it.
 - **One-click terminal jump** — click a session, land in the exact Ghostty tab and split pane. iTerm and Warp supported too.
 - **Approve from the notch** — Claude's permission requests show up with diff previews. Approve, deny, or allow-always without leaving the notch.
-- **Answer questions instantly** — `AskUserQuestion` prompts render as clickable options right in the panel.
+- **Plan-mode aware** — sessions in plan mode show an animated `PLAN` badge, so you know when Claude is drafting vs. executing.
+- **Answer questions instantly** — `AskUserQuestion` prompts render inline, with multi-select checkboxes and step-by-step flows for multi-question asks. No context switch.
 - **Session overview** — repo, branch, tool activity, CPU, and context bars for every agent, all in one expandable panel.
 - **Resume recent sessions** — scroll back through your session history and relaunch any of them in a new terminal.
 - **Worktree-first PRs** — an optional Chrome extension adds an "Open in worktree" button on GitHub PR pages that spins up a git worktree and opens it in your terminal.
-- **A bnot per session** — deterministic pixel-art characters (color, hat, ears) generated from your repo + branch hash. Every agent is recognizable at a glance.
+- **A bnot per session** — deterministic pixel-art character (color, hat, ears) hashed from your repo + branch, with its color auto-synced to the Claude Code tab via `/color`. The notch and your terminal match at a glance.
+- **Usage & health at a glance** — settings menu surfaces your Claude 5h/7d quota with reset time, hook health with one-click repair, and a check-for-updates button.
 - **Knows when to rest** — idle detection puts the bnot to sleep with a gentle Zzz animation when nothing's running.
 
 ## Built for Claude Code
@@ -50,6 +52,8 @@ Bnot turns your MacBook's notch into a live radar for every Claude Code session 
 1. Download the latest `.dmg` from the [Releases page](https://github.com/ababol/bnot/releases/latest).
 2. Open it and drag `Bnot.app` to `/Applications`.
 3. Launch Bnot.
+
+Bnot auto-updates in the background — new releases install on next launch, or you can trigger a check from the settings menu.
 
 ### Build from source
 
