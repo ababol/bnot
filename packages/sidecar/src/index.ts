@@ -13,8 +13,8 @@ import { ProcessScanner } from "./process-scanner.js";
 import { RepoFinder } from "./repo-finder.js";
 import { resumeSession } from "./session-launcher.js";
 import { SessionManager } from "./session-manager.js";
-import { SocketServer } from "./socket-server.js";
 import { jumpToSession } from "./terminal-jumper.js";
+import type { SocketMessage } from "./types.js";
 import { UsageWatcher } from "./usage-watcher.js";
 import { WorktreeCreator } from "./worktree-creator.js";
 
@@ -28,14 +28,13 @@ function requireParam(params: Record<string, unknown> | undefined, key: string):
 
 function resolveApproval(
   sessionManager: SessionManager,
-  socketServer: SocketServer,
   sessionId: string,
   action: "allow" | "allowAlways" | "deny" | "acceptEdits" | "bypassPermissions",
   feedback?: string,
 ) {
-  const clientFd = sessionManager.pendingApprovalClients[sessionId];
-  if (clientFd !== undefined) {
-    socketServer.sendResponse({ action, feedback }, clientFd);
+  const clientId = sessionManager.pendingApprovalClients[sessionId];
+  if (clientId !== undefined) {
+    emit("socketResponse", { clientId, response: { action, feedback } });
     if (sessionManager.sessions[sessionId]) {
       sessionManager.sessions[sessionId].pendingApproval = undefined;
       sessionManager.setStatus(sessionId, "active");
@@ -59,18 +58,16 @@ const CONTEXT_TRIGGERS = new Set([
   "userPromptSubmit",
 ]);
 const HISTORY_TRIGGERS = new Set(["sessionEnd", "stop"]);
-const socketServer = new SocketServer(
-  (msg, clientFd) => {
-    sessionManager.handleMessage(msg, clientFd);
-    if (CONTEXT_TRIGGERS.has(msg.type)) contextScanner.triggerScan();
-    if (HISTORY_TRIGGERS.has(msg.type)) historyScanner.triggerScan();
-  },
-  (clientFd) => sessionManager.handleClientDisconnect(clientFd),
-);
 const processScanner = new ProcessScanner(sessionManager);
 const contextScanner = new ContextScanner(sessionManager);
 const historyScanner = new HistoryScanner();
 const ghosttyFocusWatcher = new GhosttyFocusWatcher(sessionManager);
+
+function handleSocketMessage(clientId: number, msg: SocketMessage) {
+  sessionManager.handleMessage(msg, clientId);
+  if (CONTEXT_TRIGGERS.has(msg.type)) contextScanner.triggerScan();
+  if (HISTORY_TRIGGERS.has(msg.type)) historyScanner.triggerScan();
+}
 
 // Handle IPC requests from Tauri
 onRequest(async (method, params) => {
@@ -95,9 +92,9 @@ onRequest(async (method, params) => {
       const answers = params?.answers as Record<string, string | string[]> | undefined;
       const session = sessionManager.sessions[sessionId];
       if (session?.pendingQuestion) {
-        const clientFd = sessionManager.pendingApprovalClients[sessionId];
-        if (clientFd !== undefined) {
-          socketServer.sendResponse({ action: "answer", answers } as never, clientFd);
+        const clientId = sessionManager.pendingApprovalClients[sessionId];
+        if (clientId !== undefined) {
+          emit("socketResponse", { clientId, response: { action: "answer", answers } });
         }
         session.pendingQuestion = undefined;
         sessionManager.setStatus(sessionId, "active");
@@ -110,32 +107,51 @@ onRequest(async (method, params) => {
 
     case "approveSession": {
       const sessionId = requireParam(params, "sessionId");
-      resolveApproval(sessionManager, socketServer, sessionId, "allow");
+      resolveApproval(sessionManager, sessionId, "allow");
       return { success: true };
     }
 
     case "denySession": {
       const sessionId = requireParam(params, "sessionId");
       const feedback = typeof params?.feedback === "string" ? params.feedback : undefined;
-      resolveApproval(sessionManager, socketServer, sessionId, "deny", feedback);
+      resolveApproval(sessionManager, sessionId, "deny", feedback);
       return { success: true };
     }
 
     case "acceptEditsSession": {
       const sessionId = requireParam(params, "sessionId");
-      resolveApproval(sessionManager, socketServer, sessionId, "acceptEdits");
+      resolveApproval(sessionManager, sessionId, "acceptEdits");
       return { success: true };
     }
 
     case "bypassPermissionsSession": {
       const sessionId = requireParam(params, "sessionId");
-      resolveApproval(sessionManager, socketServer, sessionId, "bypassPermissions");
+      resolveApproval(sessionManager, sessionId, "bypassPermissions");
       return { success: true };
     }
 
     case "approveSessionAlways": {
       const sessionId = requireParam(params, "sessionId");
-      resolveApproval(sessionManager, socketServer, sessionId, "allowAlways");
+      resolveApproval(sessionManager, sessionId, "allowAlways");
+      return { success: true };
+    }
+
+    case "socketMessage": {
+      const clientId = params?.clientId;
+      const message = params?.message;
+      if (typeof clientId !== "number" || !message || typeof message !== "object") {
+        throw new Error("socketMessage: invalid clientId/message");
+      }
+      handleSocketMessage(clientId, message as SocketMessage);
+      return { success: true };
+    }
+
+    case "socketDisconnect": {
+      const clientId = params?.clientId;
+      if (typeof clientId !== "number") {
+        throw new Error("socketDisconnect: invalid clientId");
+      }
+      sessionManager.handleClientDisconnect(clientId);
       return { success: true };
     }
 
@@ -178,7 +194,6 @@ onRequest(async (method, params) => {
 repoFinder
   .scan()
   .catch((err) => process.stderr.write(`[repo-finder] initial scan error: ${err}\n`));
-socketServer.start();
 processScanner.start();
 contextScanner.start();
 historyScanner.start();
@@ -203,7 +218,6 @@ function cleanup() {
   historyScanner.stop();
   ghosttyFocusWatcher.stop();
   usageWatcher.stop();
-  socketServer.stop();
   process.exit(0);
 }
 

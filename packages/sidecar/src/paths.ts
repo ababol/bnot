@@ -4,8 +4,6 @@ import * as path from "path";
 export const CLAUDE_DIR = path.join(os.homedir(), ".claude");
 export const RUNTIME_DIR = path.join(os.homedir(), ".bnot");
 export const CONFIG_PATH = path.join(RUNTIME_DIR, "config.json");
-export const SOCKET_PATH = path.join(RUNTIME_DIR, "bnot.sock");
-export const PID_PATH = path.join(RUNTIME_DIR, "bnot.pid");
 export const USAGE_PATH = path.join(RUNTIME_DIR, "usage.json");
 export const STATUSLINE_PATH = path.join(RUNTIME_DIR, "statusline.sh");
 export const WORKTREES_DIR = path.join(RUNTIME_DIR, "worktrees");

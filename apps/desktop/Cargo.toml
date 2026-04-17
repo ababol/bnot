@@ -8,8 +8,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
-tauri-plugin-shell = "2"
-tauri-plugin-global-shortcut = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-updater = "2"
@@ -25,6 +23,9 @@ objc2-app-kit = { version = "0.3", features = [
     "NSRunningApplication",
 ] }
 core-graphics = "0.24"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros", "sync"] }
+libc = "0.2"
+libproc = "0.14"
 
 [lib]
 name = "bnot_lib"

@@ -133,6 +133,11 @@ fn main() {
             }
         }
         let _ = stream.flush();
+        // Stay alive until the gateway closes its end so its peer-credential check
+        // (LOCAL_PEERPID) succeeds — otherwise fire-and-forget hooks are dropped.
+        let _ = stream.shutdown(std::net::Shutdown::Write);
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+        let _ = std::io::copy(&mut stream, &mut std::io::sink());
     };
 
     match cli.command {

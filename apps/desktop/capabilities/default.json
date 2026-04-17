@@ -4,12 +4,6 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-spawn",
-    "shell:allow-stdin-write",
-    "shell:allow-kill",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister",
-    "deep-link:default",
     "autostart:default",
     "updater:default",
     "process:allow-restart"

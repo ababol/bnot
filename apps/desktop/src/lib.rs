@@ -1,7 +1,9 @@
 mod commands;
 mod keyboard;
 mod notch;
+mod peer_auth;
 mod sidecar;
+mod socket_server;
 mod window;
 
 use tauri::Manager;
@@ -11,8 +13,6 @@ use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -64,6 +64,11 @@ pub fn run() {
             let handle = app.handle().clone();
             let _sidecar = sidecar::SidecarManager::spawn(&handle);
             app.manage(_sidecar);
+
+            // Start the authenticated bridge socket server (rejects non-bnot-bridge peers).
+            // Must come after `app.manage(_sidecar)` so the listener can forward to it.
+            let socket_handle = socket_server::start(handle.clone());
+            app.manage(socket_handle);
 
             // Handle deep link URLs (bnot://worktree?...)
             let dl_handle = app.handle().clone();

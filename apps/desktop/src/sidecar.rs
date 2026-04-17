@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
+
+use crate::socket_server::SocketServerHandle;
 
 pub struct SidecarManager {
     child: Arc<Mutex<Option<Child>>>,
@@ -97,10 +99,13 @@ impl SidecarManager {
                         let data = value.get("data").cloned().unwrap_or(serde_json::Value::Null);
 
                         // Handle tauriCommand events locally (keyboard injection, app activation)
-                        if event_name == "tauriCommand" {
-                            handle_tauri_command(&data);
-                        } else {
-                            let _ = app_handle.emit(event_name, data);
+                        match event_name {
+                            "tauriCommand" => handle_tauri_command(&data),
+                            "socketResponse" => handle_socket_response(&app_handle, &data),
+                            "socketDisconnect" => handle_socket_disconnect(&app_handle, &data),
+                            _ => {
+                                let _ = app_handle.emit(event_name, data);
+                            }
                         }
                     }
                 }
@@ -127,6 +132,31 @@ impl SidecarManager {
 impl Drop for SidecarManager {
     fn drop(&mut self) {
         self.kill();
+    }
+}
+
+/// No-ops if the client has already disconnected.
+fn handle_socket_response<R: Runtime>(app: &AppHandle<R>, data: &serde_json::Value) {
+    let Some(client_id) = data.get("clientId").and_then(|v| v.as_u64()) else {
+        return;
+    };
+    let Some(response) = data.get("response") else {
+        return;
+    };
+    let Ok(line) = serde_json::to_string(response) else {
+        return;
+    };
+    if let Some(handle) = app.try_state::<SocketServerHandle>() {
+        handle.send_response(client_id, line);
+    }
+}
+
+fn handle_socket_disconnect<R: Runtime>(app: &AppHandle<R>, data: &serde_json::Value) {
+    let Some(client_id) = data.get("clientId").and_then(|v| v.as_u64()) else {
+        return;
+    };
+    if let Some(handle) = app.try_state::<SocketServerHandle>() {
+        handle.close(client_id);
     }
 }
 

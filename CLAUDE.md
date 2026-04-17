@@ -17,7 +17,8 @@ Requires: macOS 14+, Rust (rustup), Node.js 22+, pnpm.
 bnot/
   apps/
     desktop/            # Tauri v2 Rust core
-      src/              # main.rs, lib.rs, commands.rs, window.rs, notch.rs, keyboard.rs, sidecar.rs
+      src/              # main.rs, lib.rs, commands.rs, window.rs, notch.rs, keyboard.rs,
+                        # sidecar.rs, socket_server.rs, peer_auth.rs
     web/                # React 19 + TypeScript + Tailwind v4 frontend
       src/
         components/     # notch-content, compact-view, overview-view, session-card, pixel-bnot, etc.
@@ -25,10 +26,10 @@ bnot/
         hooks/          # use-tauri-events.ts, use-timer.ts, use-hero-session.ts
         lib/            # colors.ts, format.ts, tauri.ts
   packages/
-    sidecar/            # Node.js sidecar (process scanning, session mgmt, socket server)
+    sidecar/            # Node.js sidecar (process scanning, session mgmt)
       src/              # index.ts, process-scanner.ts, context-scanner.ts, session-manager.ts,
                         # paths.ts, terminal-utils.ts, terminal-jumper.ts, ghostty-tab-mapper.ts,
-                        # socket-server.ts, hook-installer.ts, history-scanner.ts, repo-finder.ts,
+                        # hook-installer.ts, history-scanner.ts, repo-finder.ts,
                         # worktree-creator.ts, session-launcher.ts, ipc.ts, types.ts
     bridge/             # Rust CLI binary (Claude Code hook handler)
       src/              # main.rs, hook_input.rs
@@ -39,10 +40,14 @@ bnot/
 ### Data Flow
 
 ```
-Claude Code hooks → bnot-bridge (Rust CLI) → Unix socket → Sidecar
+Claude Code hooks → bnot-bridge (Rust CLI) → Unix socket → Tauri Rust (peer-auth) → Sidecar
 Sidecar → stdout NDJSON events → Tauri Rust → app.emit() → React frontend
 React → invoke() → Tauri commands → Sidecar stdin NDJSON requests
 ```
+
+The socket server lives in the Tauri Rust process (`socket_server.rs`) and authenticates each
+peer against the bundled `bnot-bridge` path before forwarding messages to the sidecar via
+`socketMessage` IPC requests. Approval responses come back through `socketResponse` events.
 
 ### Panel States
 
@@ -85,6 +90,8 @@ State changes always go through `setPanelState(dispatch, state)` in `lib/tauri.t
 
 **DO use `pnpm dev` for development** — Runs `tauri dev` from root which starts Vite dev server + Rust build. The raw debug binary doesn't properly serve the embedded frontend.
 
+**DO authenticate UnixStream peers** — `~/.bnot/bnot.sock` is owned by the Tauri Rust process and rejects any peer whose executable isn't a known `bnot-bridge` path (verified via `getpeereid` + `LOCAL_PEERPID` + `proc_pidpath` in `peer_auth.rs`). The socket file is also `chmod 0600`. Any local app on the same UID would otherwise be able to inject fake `permissionRequest` messages and impersonate Claude Code's approval prompts.
+
 ## Shared Utilities
 
 **`lib/tauri.ts`** — `setPanelState()` and `jumpToSession()`. All panel state changes must use `setPanelState` to keep React and Rust in sync.
@@ -95,7 +102,7 @@ State changes always go through `setPanelState(dispatch, state)` in `lib/tauri.t
 
 **`context/types.ts`** — `directoryName()`, `isIdle()`, `projectName()`, `contextPercent()`. Derived helpers for session data.
 
-**`packages/sidecar/src/paths.ts`** — `CLAUDE_DIR`, `RUNTIME_DIR`, `CONFIG_PATH`, `SOCKET_PATH`, `PID_PATH`. All shared paths.
+**`packages/sidecar/src/paths.ts`** — `CLAUDE_DIR`, `RUNTIME_DIR`, `CONFIG_PATH`. All shared paths.
 
 **`packages/sidecar/src/terminal-utils.ts`** — `escapeForAppleScript()`, `escapeShell()`. All string escaping for shell/AppleScript.
 
@@ -126,9 +133,9 @@ Sidecar -> Tauri:  {"event":"tauriCommand", "data":{"method":"activate_app", "pa
 
 ## Claude Code Hooks
 
-Auto-installed to `~/.claude/settings.json` on startup via `hook-installer.ts`. Bridge binary reads hook JSON from stdin, sends NDJSON to `~/.bnot/bnot.sock`, exits 0.
+Auto-installed to `~/.claude/settings.json` on startup via `hook-installer.ts`. Bridge binary reads hook JSON from stdin, sends NDJSON to `~/.bnot/bnot.sock`, exits 0. The socket is owned by the Tauri Rust process and only accepts connections from the bundled `bnot-bridge` binary.
 
-For dangerous tools (Bash, Edit, Write, NotebookEdit, MultiEdit), bridge blocks and waits for approval response from sidecar (120s timeout). For safe tools, it's fire-and-forget.
+For dangerous tools (Bash, Edit, Write, NotebookEdit, MultiEdit), bridge blocks and waits for approval response (120s timeout). For safe tools, it's fire-and-forget.
 
 ## Context Token Estimation
 
@@ -139,8 +146,7 @@ Constants in `context-scanner.ts`: `ESTIMATION_RATIO=0.85`, `OVER_RATIO_OFFSET=0
 
 ## Runtime Files
 
-- `~/.bnot/bnot.sock` — Unix domain socket (sidecar <-> bridge)
-- `~/.bnot/bnot.pid` — PID file
+- `~/.bnot/bnot.sock` — Unix domain socket, owned by Tauri Rust, mode 0600, peer-authenticated
 - `~/.bnot/config.json` — Project directories config
 - `~/.claude/settings.json` — Claude Code hooks
 - `~/.claude/sessions/*.json` — Session metadata
@@ -149,15 +155,16 @@ Constants in `context-scanner.ts`: `ESTIMATION_RATIO=0.85`, `OVER_RATIO_OFFSET=0
 ## Testing
 
 ```bash
-# Send a fake hook event
+# Send a fake hook event via the bridge (the only authenticated path).
 echo '{"session_id":"test","tool_name":"Edit","tool_input":{"file_path":"test.ts"},"hookEventName":"PreToolUse","cwd":"/tmp"}' | ./target/debug/bnot-bridge pre-tool
 
-# Test socket directly (requires app running)
+# Verify the socket rejects non-bridge peers — this should connect, then close immediately
+# without producing any UI update. Look for a "[socket-server] reject connection" line in the
+# Tauri stderr.
 node -e "
 const net = require('net');
-const sock = net.createConnection(process.env.HOME + '/.bnot/bnot.sock', () => {
-  sock.write(JSON.stringify({type:'sessionStart',sessionId:'test',timestamp:new Date().toISOString(),payload:{sessionStart:{workingDirectory:'/tmp'}}}) + '\n');
-  setTimeout(() => sock.end(), 200);
-});
+const sock = net.createConnection(process.env.HOME + '/.bnot/bnot.sock');
+sock.on('close', () => console.log('closed'));
+sock.on('error', (e) => console.log('err', e.code));
 "
 ```

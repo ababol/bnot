@@ -145,6 +145,9 @@ export class SessionManager {
 
         if (p.toolName === "AskUserQuestion" && (p.question || p.questions?.length)) {
           this.setStatus(sessionId, "waitingAnswer");
+          // preToolUse and permissionRequest fire from separate bridge processes
+          // and can land in either order; AskUserQuestion only ever uses pendingQuestion.
+          this.sessions[sessionId].pendingApproval = undefined;
           const firstQ = p.questions?.[0];
           this.sessions[sessionId].pendingQuestion = {
             question: p.question ?? firstQ?.question ?? "",
@@ -167,7 +170,11 @@ export class SessionManager {
           this.heroSessionId = sessionId;
           this.flushUpdate();
           emit("panelStateChange", { state: "alert", sessionId });
-        } else {
+        } else if (
+          // Skip if a racing permissionRequest already set a pending interaction.
+          !this.sessions[sessionId].pendingApproval &&
+          !this.sessions[sessionId].pendingQuestion
+        ) {
           this.setStatus(sessionId, "active");
         }
         break;
@@ -184,12 +191,9 @@ export class SessionManager {
         this.pendingApprovalClients[sessionId] = clientFd;
         this.heroSessionId = sessionId;
 
-        // If session already has a pendingQuestion (from PreToolUse for AskUserQuestion),
-        // keep it — just store the clientFd so we can send the answer back through the socket.
-        if (this.sessions[sessionId].pendingQuestion) {
-          this.flushUpdate();
-          emit("panelStateChange", { state: "alert", sessionId });
-        } else {
+        // permissionRequest carries no option data; for AskUserQuestion we just
+        // store the clientFd above and wait for preToolUse to populate the question.
+        if (!this.sessions[sessionId].pendingQuestion && p.toolName !== "AskUserQuestion") {
           this.setStatus(sessionId, "waitingApproval");
           this.sessions[sessionId].pendingApproval = {
             toolName: p.toolName,
@@ -199,9 +203,9 @@ export class SessionManager {
             canRemember: p.canRemember,
             receivedAt: Date.now(),
           };
-          this.flushUpdate();
-          emit("panelStateChange", { state: "alert", sessionId });
         }
+        this.flushUpdate();
+        emit("panelStateChange", { state: "alert", sessionId });
         break;
       }
 
