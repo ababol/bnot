@@ -1,4 +1,5 @@
 import { execFile } from "child_process";
+import { basename } from "path";
 import { promisify } from "util";
 import type { SessionManager } from "./session-manager.js";
 
@@ -127,44 +128,48 @@ export class ProcessScanner {
       }
     }
 
-    // Mark completed and schedule deletion if process gone. Check pid
-    // liveness directly (kill(pid, 0)) instead of relying on `activePids` —
-    // the enrichment pipeline (ps + lsof + git) can transiently miss a pid,
-    // which would incorrectly mark a live hook session as orphaned, blow it
-    // away after COMPLETION_DELAY, and cause proc-<pid> to come back and
-    // re-trigger /color injection.
-    for (const [id, session] of Object.entries(this.sm.sessions)) {
-      if (this.pendingDeletions.has(id)) continue;
-
-      let isOrphan = false;
-      if (id.startsWith("proc-")) {
-        const pid = session.processPid ?? Number(id.slice("proc-".length));
-        isOrphan = Number.isFinite(pid) && !isPidAlive(pid);
-      } else if (session.processPid != null) {
-        isOrphan = !isPidAlive(session.processPid);
-      } else if (session.terminalPid != null) {
-        // Hook sessions without a processPid: check if the bridge's parent
-        // (terminalPid) is still alive. Catches stale subagent hook sessions
-        // whose parent process has exited.
-        isOrphan = !isPidAlive(session.terminalPid);
-      }
-
-      if (isOrphan) {
-        this.sm.setStatus(id, "completed");
-        this.pendingDeletions.add(id);
-        setTimeout(() => {
-          const tty = this.sm.sessions[id]?.tty;
-          delete this.sm.sessions[id];
-          this.pendingDeletions.delete(id);
-          this.sm.idleSessions.delete(id);
-          // Evict TTY from coloredTtys if no remaining session uses it,
-          // so new sessions on reused TTYs still get color injection.
-          if (tty && !Object.values(this.sm.sessions).some((s) => s.tty === tty)) {
-            this.sm.coloredTtys.delete(tty);
+    // Mark completed and schedule deletion if process gone. We check
+    // kill(pid, 0) for cheap liveness, but also cross-check that the pid
+    // still maps to a `claude` process — macOS recycles pids, and a stale
+    // session whose original Claude died can sit forever pointing at a
+    // recycled pid that kill(pid, 0) reports as "alive".
+    const activePidSet = new Set(activePids.map((p) => p.pid));
+    const orphanChecks = await Promise.all(
+      Object.entries(this.sm.sessions)
+        .filter(([id]) => !this.pendingDeletions.has(id))
+        .map(async ([id, session]) => {
+          let pid: number | undefined;
+          if (id.startsWith("proc-")) {
+            const candidate = session.processPid ?? Number(id.slice("proc-".length));
+            if (Number.isFinite(candidate)) pid = candidate;
+          } else if (session.processPid != null) {
+            pid = session.processPid;
+          } else if (session.terminalPid != null) {
+            // Hook sessions without a processPid: fall back to bridge's parent
+            // (the Claude that spawned the hook).
+            pid = session.terminalPid;
           }
-          this.sm.emitUpdate();
-        }, COMPLETION_DELAY_MS);
-      }
+          const isOrphan = pid !== undefined && !(await this.pidIsClaude(pid, activePidSet));
+          return { id, isOrphan };
+        }),
+    );
+
+    for (const { id, isOrphan } of orphanChecks) {
+      if (!isOrphan) continue;
+      this.sm.setStatus(id, "completed");
+      this.pendingDeletions.add(id);
+      setTimeout(() => {
+        const tty = this.sm.sessions[id]?.tty;
+        delete this.sm.sessions[id];
+        this.pendingDeletions.delete(id);
+        this.sm.idleSessions.delete(id);
+        // Evict TTY from coloredTtys if no remaining session uses it,
+        // so new sessions on reused TTYs still get color injection.
+        if (tty && !Object.values(this.sm.sessions).some((s) => s.tty === tty)) {
+          this.sm.coloredTtys.delete(tty);
+        }
+        this.sm.emitUpdate();
+      }, COMPLETION_DELAY_MS);
     }
 
     // Dedup by Claude pid, not cwd — two Claudes in the same folder must stay
@@ -331,6 +336,28 @@ export class ProcessScanner {
     return results;
   }
 
+  /**
+   * True iff `pid` is alive AND still owned by a `claude` process.
+   * `activePidSet` is the cheap fast-path: pids we just confirmed via the
+   * Claude-only scan. For pids alive but missing from the set, we fall back
+   * to a direct `ps comm` lookup to distinguish a transient enrichment miss
+   * (still claude) from a recycled pid (not claude → orphan).
+   */
+  private async pidIsClaude(pid: number, activePidSet: Set<number>): Promise<boolean> {
+    if (!isPidAlive(pid)) return false;
+    if (activePidSet.has(pid)) return true;
+    return basename(await this.getComm(pid)) === "claude";
+  }
+
+  private async getComm(pid: number): Promise<string> {
+    try {
+      const { stdout } = await exec("/bin/ps", ["-o", "comm=", "-p", String(pid)]);
+      return stdout.trim();
+    } catch {
+      return "";
+    }
+  }
+
   private async getParentPid(pid: number): Promise<number> {
     try {
       const { stdout } = await exec("/bin/ps", ["-o", "ppid=", "-p", String(pid)]);
@@ -433,18 +460,14 @@ export class ProcessScanner {
   }
 
   private async getTerminal(parentPid: number): Promise<string | null> {
-    try {
-      const { stdout } = await exec("/bin/ps", ["-o", "comm=", "-p", String(parentPid)]);
-      const comm = stdout.trim();
-      if (comm.includes("iTerm")) return "iTerm2";
-      if (comm.includes("Terminal")) return "Terminal";
-      if (comm.includes("Warp")) return "Warp";
-      if (/ghostty|Ghostty/.test(comm)) return "Ghostty";
-      if (comm.includes("Alacritty")) return "Alacritty";
-      if (comm.includes("kitty")) return "Kitty";
-    } catch {
-      // ignore
-    }
+    const comm = await this.getComm(parentPid);
+    if (!comm) return null;
+    if (comm.includes("iTerm")) return "iTerm2";
+    if (comm.includes("Terminal")) return "Terminal";
+    if (comm.includes("Warp")) return "Warp";
+    if (/ghostty|Ghostty/.test(comm)) return "Ghostty";
+    if (comm.includes("Alacritty")) return "Alacritty";
+    if (comm.includes("kitty")) return "Kitty";
     return null;
   }
 }

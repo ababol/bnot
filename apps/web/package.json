@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:dev": "tsc && vite build --mode development",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config ../desktop/tauri.conf.json",
     "tauri:build": "tauri build --config ../desktop/tauri.conf.json"

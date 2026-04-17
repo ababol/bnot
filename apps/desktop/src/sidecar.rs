@@ -50,6 +50,8 @@ impl SidecarManager {
         if let Some(ref mut stdin) = *self.stdin.lock().unwrap() {
             let _ = writeln!(stdin, "{}", msg);
             let _ = stdin.flush();
+        } else {
+            eprintln!("[sidecar] dropping {method} — sidecar stdin not ready");
         }
     }
 

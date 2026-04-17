@@ -10,6 +10,7 @@ const exec = promisify(execFile);
  */
 export async function focusGhosttyById(terminalId: string): Promise<boolean> {
   const script = `tell application "Ghostty"
+  activate
   repeat with w in windows
     repeat with tb in tabs of w
       repeat with t in terminals of tb
@@ -93,6 +94,7 @@ async function focusByTty(tty: string, label: string): Promise<boolean> {
 
     const script = `
 tell application "Ghostty"
+  activate
   set matches to every terminal whose name is "${escapeForAppleScript(label)}"
   if (count of matches) > 0 then
     focus item 1 of matches
@@ -111,6 +113,7 @@ end tell`;
 async function focusByDir(dir: string): Promise<boolean> {
   const script = `
 tell application "Ghostty"
+  activate
   set matches to every terminal whose working directory is "${escapeForAppleScript(dir)}"
   if (count of matches) > 0 then
     focus item 1 of matches

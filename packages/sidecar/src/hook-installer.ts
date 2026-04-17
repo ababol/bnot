@@ -58,8 +58,11 @@ export async function installHooksIfNeeded(bridgePath?: string) {
     return (hooks[event] ?? []).some((entry) =>
       entry.hooks?.some(
         (h) =>
-          h.command?.includes(`bnot-bridge ${subcommand}`) &&
-          (isAsync ? h.async === true : !h.async),
+          // Match on the full bridge path, not just the subcommand. Otherwise a
+          // dev build inherits hooks pointing at /Applications/Bnot.app's bridge,
+          // peer-auth rejects them, and hooks silently fail. Rewriting whenever
+          // the path drifts self-heals dev↔prod swaps.
+          h.command === `${bridge} ${subcommand}` && (isAsync ? h.async === true : !h.async),
       ),
     );
   });
@@ -73,7 +76,9 @@ export async function installHooksIfNeeded(bridgePath?: string) {
       settings.env = envSection;
       try {
         await fs.writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
-        process.stderr.write("[hookInstaller] patched missing CLAUDE_CODE_DISABLE_TERMINAL_TITLE\n");
+        process.stderr.write(
+          "[hookInstaller] patched missing CLAUDE_CODE_DISABLE_TERMINAL_TITLE\n",
+        );
       } catch {
         // ignore
       }
@@ -277,11 +282,27 @@ export async function installStatusLineIfNeeded(): Promise<void> {
       `}' > "${USAGE_PATH}" 2>/dev/null || true`,
       "session_id=$(echo \"$input\" | jq -r '.session_id // empty' 2>/dev/null)",
       'if [ -n "$session_id" ]; then',
-      `  echo "$input" | jq -c '{`,
-      `    used_percentage: (.context_window.used_percentage // null),`,
-      `    context_window_size: (.context_window.context_window_size // 0),`,
-      `    cached_at: (now * 1000 | floor)`,
-      `  }' > "${RUNTIME_DIR}/ctx-` + "${session_id}" + `.json" 2>/dev/null || true`,
+      // Honor CLAUDE_CODE_AUTO_COMPACT_WINDOW: override the displayed max and
+      // rescale used_percentage so absolute used tokens stay identical.
+      // Claude Code's settings.json `env` block doesn't propagate to the
+      // statusLine subprocess, so fall back to parsing settings.json directly.
+      '  override="${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-0}"',
+      '  if [ "$override" = "0" ] || [ -z "$override" ]; then',
+      `    override=$(jq -r '.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW // 0' "${SETTINGS_PATH}" 2>/dev/null || echo 0)`,
+      "  fi",
+      `  echo "$input" | jq -c --argjson override "$override" '`,
+      `    (.context_window.used_percentage // null) as $pct |`,
+      `    (.context_window.context_window_size // 0) as $win |`,
+      `    if $override > 0 and $pct != null and $win > 0 then`,
+      `      { used_percentage: ($pct * $win / $override),`,
+      `        context_window_size: $override,`,
+      `        cached_at: (now * 1000 | floor) }`,
+      `    else`,
+      `      { used_percentage: $pct,`,
+      `        context_window_size: $win,`,
+      `        cached_at: (now * 1000 | floor) }`,
+      `    end`,
+      `  ' > "${RUNTIME_DIR}/ctx-` + "${session_id}" + `.json" 2>/dev/null || true`,
       "fi",
     ].join("\n") + "\n";
 

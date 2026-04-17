@@ -227,7 +227,9 @@ export class SessionManager {
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].currentTool = undefined;
-        this.sessions[sessionId].isThinking = false;
+        // Keep isThinking — Claude is generating the next tool call / response
+        // until Stop fires. Clearing it here flips the hero to "idle" between
+        // tools.
         this.sessions[sessionId].pendingApproval = undefined;
         this.sessions[sessionId].pendingQuestion = undefined;
         if (
@@ -259,15 +261,14 @@ export class SessionManager {
       }
 
       case "sessionEnd": {
-        // Claude Code's `Stop` hook fires at the end of every assistant turn,
-        // not at session end. Don't mark completed or delete — Claude is still
-        // running and awaiting the next prompt. True session death is detected
-        // by the process scanner's kill(pid,0) orphan sweep.
-        this.ensureSession(sessionId, timestamp);
-        this.sessions[sessionId].isThinking = false;
-        this.sessions[sessionId].currentTool = undefined;
-        this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
-        this.idleSessions.add(sessionId);
+        // Don't mark completed or bump lastActivity here — Claude Code fires
+        // SessionEnd for mid-session events too (compaction, prompt-input-exit,
+        // /clear). Real session death is detected by the orphan sweep's
+        // kill(pid,0) + comm check; that's authoritative.
+        if (this.sessions[sessionId]) {
+          this.sessions[sessionId].isThinking = false;
+          this.sessions[sessionId].currentTool = undefined;
+        }
         delete this.pendingApprovalClients[sessionId];
         break;
       }

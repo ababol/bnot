@@ -4,6 +4,7 @@ import { platform } from "os";
 import { basename, dirname, join, resolve as resolvePath } from "path";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
+import { notifyUser } from "./notify.js";
 import { WORKTREES_DIR } from "./paths.js";
 import { RepoFinder } from "./repo-finder.js";
 import { startNewSession } from "./session-launcher.js";
@@ -39,9 +40,7 @@ export class WorktreeCreator {
     private sessionManager: SessionManager,
   ) {}
 
-  async open(
-    req: WorktreeRequest,
-  ): Promise<{ success: boolean; path?: string; error?: string; skipped?: boolean }> {
+  async open(req: WorktreeRequest): Promise<{ success: boolean; path?: string; error?: string }> {
     process.stderr.write(`[worktree] request: ${req.headOwner}/${req.headRepo}#${req.branch}\n`);
 
     // Refuse fork branches via deep link: their contents (including
@@ -65,10 +64,10 @@ export class WorktreeCreator {
       repoPath = await this.repoFinder.findRepo(req.owner, req.repo);
     }
     if (!repoPath) {
-      process.stderr.write(
-        `[worktree] ${req.owner}/${req.repo} not found in configured directories, skipping\n`,
-      );
-      return { success: true, skipped: true };
+      const msg = `${req.owner}/${req.repo} not found in any project directory configured in ~/.bnot/config.json`;
+      process.stderr.write(`[worktree] ${msg}\n`);
+      void notifyUser("Bnot: repo not found", msg);
+      return { success: false, error: "repo not found" };
     }
 
     process.stderr.write(`[worktree] found repo at ${repoPath}\n`);

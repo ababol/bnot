@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "cargo build -p bnot-bridge --release && tauri dev",
     "build": "pnpm --filter bnot-sidecar build && cargo build -p bnot-bridge --release && tauri build",
+    "build:dev": "pnpm --filter bnot-sidecar build && cargo build -p bnot-bridge --release && tauri build --config apps/desktop/tauri.dev.conf.json && pkill -x bnot 2>/dev/null; rm -rf /Applications/Bnot.app && cp -R target/release/bundle/macos/Bnot.app /Applications/Bnot.app && echo 'installed → /Applications/Bnot.app'",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

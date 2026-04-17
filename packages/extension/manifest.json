@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Bnot - Open in Worktree",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Adds 'Open in worktree' button to GitHub PR pages",
   "content_scripts": [
     {
-      "matches": ["https://github.com/*/*/pull/*"],
+      "matches": ["https://github.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

@@ -1,5 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { notifyPermissionRequired, notifyUser } from "./notify.js";
 import { detectRunningTerminal } from "./terminal-jumper.js";
 import { escapeForAppleScript, escapeShell } from "./terminal-utils.js";
 
@@ -45,7 +46,7 @@ end tell`;
   try {
     await exec("/usr/bin/osascript", ["-e", script]);
   } catch (e) {
-    process.stderr.write(`[session-launcher] iTerm launch failed: ${e}\n`);
+    surfaceLaunchError(e, "iTerm");
   }
 }
 
@@ -72,6 +73,27 @@ end tell`;
   try {
     await exec("/usr/bin/osascript", ["-e", script]);
   } catch (e) {
-    process.stderr.write(`[session-launcher] Ghostty launch failed: ${e}\n`);
+    surfaceLaunchError(e, "Ghostty");
+  }
+}
+
+// macOS error codes for missing Accessibility (-1719/-1743) or Automation (-1728/-600).
+// Anchored with non-digit boundaries so -600 doesn't match -6000, -17190, etc.
+const PERMISSION_ERROR_RE = /(?<!\d)-(?:1719|1743|1728|600)(?!\d)|not authori[zs]ed|not allowed/i;
+
+function surfaceLaunchError(err: unknown, terminal: string): void {
+  const stderr = (err as { stderr?: unknown }).stderr;
+  const stderrStr = typeof stderr === "string" ? stderr : "";
+  const text = err instanceof Error ? `${err.message} ${stderrStr}` : String(err);
+  process.stderr.write(`[session-launcher] ${terminal} launch failed: ${text}\n`);
+  if (PERMISSION_ERROR_RE.test(text)) {
+    // -1728/-600 are typically Automation; -1719/-1743 are Accessibility.
+    const pane = /(?<!\d)-(?:1728|600)(?!\d)/.test(text) ? "Automation" : "Accessibility";
+    void notifyPermissionRequired(
+      pane,
+      `Grant Bnot ${pane} permission so it can drive ${terminal}, then try again.`,
+    );
+  } else {
+    void notifyUser(`Bnot: failed to open ${terminal}`, text.slice(0, 200));
   }
 }

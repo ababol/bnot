@@ -144,6 +144,22 @@ Exact query (60s): `claude --print "/context" --resume <id>`.
 
 Constants in `context-scanner.ts`: `ESTIMATION_RATIO=0.85`, `OVER_RATIO_OFFSET=0.08`, `MIN_FILL_PERCENT=0.3`, `MAX_FILL_PERCENT=0.7`.
 
+## macOS Permissions
+
+Bnot drives Ghostty/iTerm via AppleScript and System Events keystrokes (worktree
+launch, /color injection, tab focus). After first install — and after any version
+bump that re-signs the bundle — macOS revokes the relevant grants and the
+keystroke path silently fails (Ghostty `activate` still works, so the user just
+sees their existing tab focus). Grant manually:
+
+- **System Settings → Privacy & Security → Accessibility** → enable Bnot
+- **System Settings → Privacy & Security → Automation** → Bnot → enable Ghostty
+  (and iTerm if used)
+
+When osascript fails with `-1719` / `-1743` / `-1728` / `-600`, the sidecar
+fires a native macOS notification telling the user to grant Accessibility
+(`packages/sidecar/src/session-launcher.ts::surfaceLaunchError`).
+
 ## Runtime Files
 
 - `~/.bnot/bnot.sock` — Unix domain socket, owned by Tauri Rust, mode 0600, peer-authenticated

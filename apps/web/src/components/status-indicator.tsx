@@ -155,8 +155,7 @@ export default function StatusIndicator({ dot, size = "sm" }: Props) {
         const barStart = b * 3;
         const frame = active - barStart;
         // Ramp up then hold: 0→0.3, 1→0.7, 2→1.0, else dim
-        const alpha =
-          frame === 2 ? 0.9 : frame === 1 ? 0.6 : frame === 0 ? 0.35 : 0.1;
+        const alpha = frame === 2 ? 0.9 : frame === 1 ? 0.6 : frame === 0 ? 0.35 : 0.1;
         const { y, x0, x1 } = bars[b];
         for (let x = x0; x <= x1; x++) fillSingle(x, y, alpha);
       }
