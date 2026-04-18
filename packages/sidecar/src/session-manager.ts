@@ -3,6 +3,7 @@ import { writeFile } from "fs/promises";
 import { basename } from "path";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
+import { TranscriptWatcher } from "./transcript-watcher.js";
 import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
 
 const exec = promisify(execFile);
@@ -34,6 +35,7 @@ export class SessionManager {
   pendingApprovalClients: Record<string, number> = {};
   coloredSessions = new Set<string>();
   coloredTtys = new Set<string>();
+  transcriptWatcher = new TranscriptWatcher(this);
   private completedAt: Record<string, number> = {};
   idleSessions = new Set<string>();
 
@@ -109,6 +111,7 @@ export class SessionManager {
             terminalApp: p.terminalApp,
             terminalPid: p.terminalPid,
             ghosttyTerminalId: p.ghosttyTerminalId,
+            transcriptPath: p.transcriptPath,
             status: "active",
             startedAt: Date.now(),
             lastActivity: new Date(timestamp).getTime(),
@@ -122,6 +125,7 @@ export class SessionManager {
           if (p.taskName) this.sessions[sessionId].taskName = p.taskName;
           if (p.terminalApp) this.sessions[sessionId].terminalApp = p.terminalApp;
           if (p.terminalPid) this.sessions[sessionId].terminalPid = p.terminalPid;
+          if (p.transcriptPath) this.sessions[sessionId].transcriptPath = p.transcriptPath;
           // Correct the UNKNOWN_CWD placeholder left by ensureSession() when a hook
           // event arrived before any sessionStart (e.g., Notify/Stop).
           if (
@@ -131,6 +135,9 @@ export class SessionManager {
           ) {
             this.sessions[sessionId].workingDirectory = p.workingDirectory;
           }
+        }
+        if (p.transcriptPath) {
+          void this.transcriptWatcher.attach(sessionId, p.transcriptPath);
         }
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         if (!this.heroSessionId) this.heroSessionId = sessionId;

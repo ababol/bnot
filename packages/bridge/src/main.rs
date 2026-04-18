@@ -87,6 +87,7 @@ fn main() {
     });
 
     let session_type = hook.as_ref().and_then(|h| h.session_type.as_deref());
+    let transcript_path = hook.as_ref().and_then(|h| h.transcript_path.as_deref());
 
     // Subagent hooks create phantom sessions in the UI. The parent session
     // already tracks subagent activity via SubagentStart/SubagentStop events.
@@ -117,6 +118,7 @@ fn main() {
                     terminal_app,
                     terminal_pid: parent_pid,
                     ghostty_terminal_id: ghostty_terminal_id.as_deref(),
+                    transcript_path,
                 },
             },
             session_mode,
@@ -319,6 +321,7 @@ fn main() {
                         terminal_app,
                         terminal_pid: parent_pid,
                         ghostty_terminal_id: ghostty_terminal_id.as_deref(),
+                        transcript_path,
                     },
                 },
                 session_mode,
@@ -765,6 +768,8 @@ struct SessionStartPayload<'a> {
     terminal_pid: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ghostty_terminal_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    transcript_path: Option<&'a str>,
 }
 
 #[derive(Serialize)]

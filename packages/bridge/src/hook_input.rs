@@ -14,6 +14,8 @@ pub struct ClaudeHookInput {
     #[serde(rename = "tool_response")]
     pub tool_response: Option<ToolResponse>,
     pub cwd: Option<String>,
+    #[serde(rename = "transcript_path")]
+    pub transcript_path: Option<String>,
     #[serde(rename = "session_type")]
     pub session_type: Option<String>,
     pub permission_mode: Option<String>,
