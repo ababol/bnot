@@ -28,6 +28,7 @@ pub fn run() {
             commands::accept_edits_session,
             commands::bypass_permissions_session,
             commands::resume_session,
+            commands::open_worktree_path,
             commands::open_settings,
             commands::quit_app,
             commands::get_hook_health,

@@ -1,27 +1,23 @@
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../context/session-context";
 import { needsAttention } from "../context/types";
+import { useOverviewKeyboard } from "../hooks/use-overview-keyboard";
 import { bnotColorFromSessions } from "../lib/colors";
-import { collapsePanel, jumpToSession } from "../lib/tauri";
-import HistoryCard from "./history-card";
+import { collapsePanel, jumpToSessionAndCollapse } from "../lib/tauri";
 import PixelBnot from "./pixel-bnot";
 import SessionCard from "./session-card";
 import SettingsMenu from "./settings-menu";
+import TabBar from "./tab-bar";
+import WorktreesView from "./worktrees-view";
 
 interface Props {
   notchHeight: number;
 }
 
-// Wait out the panel collapse animation (ANIMATION_DURATION in apps/desktop/src/window.rs)
-// before triggering the next action, so focus handoff doesn't race the shrink.
-const COLLAPSE_SETTLE_MS = 80;
-
 export default function OverviewView({ notchHeight }: Props) {
   const { state, dispatch } = useSession();
   const sessions = state.sessions;
-  const history = state.history;
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -33,16 +29,24 @@ export default function OverviewView({ notchHeight }: Props) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [settingsOpen]);
-  const sortedSessions = Object.values(sessions).sort((a, b) => {
-    const priorityDelta = Number(needsAttention(b)) - Number(needsAttention(a));
-    if (priorityDelta !== 0) return -priorityDelta;
-    // Newest first, oldest last — so a session's rank stays stable as
-    // newer sessions appear above it, and it drifts toward the bottom.
-    return b.startedAt - a.startedAt;
-  });
+
+  const sortedSessions = useMemo(
+    () =>
+      Object.values(sessions).sort((a, b) => {
+        const priorityDelta = Number(needsAttention(b)) - Number(needsAttention(a));
+        if (priorityDelta !== 0) return -priorityDelta;
+        // Newest first, oldest last — so a session's rank stays stable as
+        // newer sessions appear above it, and it drifts toward the bottom.
+        return b.startedAt - a.startedAt;
+      }),
+    [sessions],
+  );
+  const sortedSessionIds = useMemo(() => sortedSessions.map((s) => s.id), [sortedSessions]);
   const prioritySession = sortedSessions.find(needsAttention);
   const heroId = prioritySession?.id ?? state.heroSessionId ?? sortedSessions[0]?.id ?? null;
   const bnotColor = bnotColorFromSessions(sessions);
+
+  useOverviewKeyboard(sortedSessionIds);
 
   const close = () => collapsePanel(dispatch, sessions);
 
@@ -61,14 +65,10 @@ export default function OverviewView({ notchHeight }: Props) {
   }, [dispatch]);
 
   const handleSessionClick = (sessionId: string) => {
-    collapsePanel(dispatch, sessions);
-    setTimeout(() => jumpToSession(sessionId), COLLAPSE_SETTLE_MS);
+    jumpToSessionAndCollapse(dispatch, sessions, sessionId);
   };
 
-  const handleResumeClick = (sessionId: string, projectPath: string) => {
-    collapsePanel(dispatch, sessions);
-    setTimeout(() => invoke("resume_session", { sessionId, projectPath }), COLLAPSE_SETTLE_MS);
-  };
+  const sessionCursor = Math.min(state.sessionsCursor, Math.max(0, sortedSessions.length - 1));
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-[10px] bg-black">
@@ -78,7 +78,7 @@ export default function OverviewView({ notchHeight }: Props) {
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 pb-2">
         <PixelBnot color={bnotColor} isActive={true} />
-        <span className="text-xs font-semibold text-text-secondary">Sessions</span>
+        <TabBar />
         <div className="flex-1" />
         <div className="relative" data-settings-anchor>
           <button
@@ -116,35 +116,22 @@ export default function OverviewView({ notchHeight }: Props) {
         </button>
       </div>
 
-      {/* Session list */}
-      {sortedSessions.length === 0 && history.length === 0 ? (
+      {/* Body */}
+      {state.view === "worktrees" ? (
+        <WorktreesView />
+      ) : sortedSessions.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-xs text-text-dim">
-          No sessions
+          No active sessions
         </div>
       ) : (
         <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-3">
-          {sortedSessions.map((session) => (
+          {sortedSessions.map((session, i) => (
             <SessionCard
               key={session.id}
               session={session}
               isHero={session.id === heroId}
+              isCursor={i === sessionCursor}
               onClick={() => handleSessionClick(session.id)}
-            />
-          ))}
-
-          {sortedSessions.length > 0 && history.length > 0 && (
-            <div className="flex items-center gap-2 py-1">
-              <div className="h-px flex-1 bg-white/10" />
-              <span className="text-[10px] text-text-dim">Recent</span>
-              <div className="h-px flex-1 bg-white/10" />
-            </div>
-          )}
-
-          {history.map((session) => (
-            <HistoryCard
-              key={session.sessionId}
-              session={session}
-              onClick={() => handleResumeClick(session.sessionId, session.projectPath)}
             />
           ))}
         </div>

@@ -6,6 +6,9 @@ export type SessionMode = "normal" | "plan" | "auto" | "dangerous";
 export const PANEL_STATES = ["compact", "alert", "overview", "approval", "ask"] as const;
 export type PanelState = (typeof PANEL_STATES)[number];
 
+export const VIEW_MODES = ["sessions", "worktrees"] as const;
+export type ViewMode = (typeof VIEW_MODES)[number];
+
 export interface NotchGeometry {
   centerX: number;
   topY: number;
@@ -97,16 +100,13 @@ export interface AgentSession {
   claudeSessionId?: string;
 }
 
-// History session for resume after restart
-export interface HistorySession {
-  sessionId: string;
-  projectPath: string;
-  summary: string;
-  firstPrompt: string;
-  messageCount: number;
-  gitBranch?: string;
-  created: string;
-  modified: string;
+// Worktree entry for the Worktrees tab
+export interface WorktreeRecord {
+  path: string;
+  repoName: string;
+  branch: string;
+  lastActivity: number;
+  activeSessionId?: string;
 }
 
 // Hook health types (mirrored from sidecar/hook-installer.ts)
@@ -158,8 +158,4 @@ export function isIdle(s: AgentSession, now: number): boolean {
 
 export function needsAttention(s: AgentSession): boolean {
   return s.status === "waitingApproval" || s.status === "waitingAnswer";
-}
-
-export function projectName(s: HistorySession): string {
-  return s.projectPath.split("/").pop() ?? s.projectPath;
 }

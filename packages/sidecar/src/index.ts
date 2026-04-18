@@ -1,3 +1,4 @@
+import * as path from "path";
 import { ContextScanner } from "./context-scanner.js";
 import { GhosttyFocusWatcher } from "./ghostty-focus-watcher.js";
 import { HistoryScanner } from "./history-scanner.js";
@@ -9,6 +10,7 @@ import {
   repairHooks,
 } from "./hook-installer.js";
 import { emit, onRequest } from "./ipc.js";
+import { WORKTREES_DIR } from "./paths.js";
 import { ProcessScanner } from "./process-scanner.js";
 import { RepoFinder } from "./repo-finder.js";
 import { resumeSession } from "./session-launcher.js";
@@ -17,6 +19,7 @@ import { jumpToSession } from "./terminal-jumper.js";
 import type { SocketMessage } from "./types.js";
 import { UsageWatcher } from "./usage-watcher.js";
 import { WorktreeCreator } from "./worktree-creator.js";
+import { WorktreeRegistry } from "./worktree-registry.js";
 
 function requireParam(params: Record<string, unknown> | undefined, key: string): string {
   const val = params?.[key];
@@ -58,15 +61,18 @@ const CONTEXT_TRIGGERS = new Set([
   "userPromptSubmit",
 ]);
 const HISTORY_TRIGGERS = new Set(["sessionEnd", "stop"]);
+const WORKTREE_TRIGGERS = new Set(["sessionStart", "sessionEnd", "stop"]);
 const processScanner = new ProcessScanner(sessionManager);
 const contextScanner = new ContextScanner(sessionManager);
 const historyScanner = new HistoryScanner();
+const worktreeRegistry = new WorktreeRegistry(sessionManager, historyScanner);
 const ghosttyFocusWatcher = new GhosttyFocusWatcher(sessionManager);
 
 function handleSocketMessage(clientId: number, msg: SocketMessage) {
   sessionManager.handleMessage(msg, clientId);
   if (CONTEXT_TRIGGERS.has(msg.type)) contextScanner.triggerScan();
   if (HISTORY_TRIGGERS.has(msg.type)) historyScanner.triggerScan();
+  if (WORKTREE_TRIGGERS.has(msg.type)) worktreeRegistry.triggerScan();
 }
 
 // Handle IPC requests from Tauri
@@ -166,6 +172,17 @@ onRequest(async (method, params) => {
       return result;
     }
 
+    case "openWorktreePath": {
+      const raw = requireParam(params, "path");
+      const resolved = path.resolve(raw);
+      // Security: only allow paths physically under ~/.bnot/worktrees/
+      if (resolved !== WORKTREES_DIR && !resolved.startsWith(WORKTREES_DIR + path.sep)) {
+        throw new Error(`openWorktreePath: refused — not under ${WORKTREES_DIR}`);
+      }
+      await worktreeCreator.launchOrJump(resolved);
+      return { success: true };
+    }
+
     case "resumeSession": {
       const sessionId = requireParam(params, "sessionId");
       const projectPath = requireParam(params, "projectPath");
@@ -197,6 +214,7 @@ repoFinder
 processScanner.start();
 contextScanner.start();
 historyScanner.start();
+worktreeRegistry.start();
 ghosttyFocusWatcher.start();
 usageWatcher.start();
 installHooksIfNeeded()
@@ -216,6 +234,7 @@ function cleanup() {
   processScanner.stop();
   contextScanner.stop();
   historyScanner.stop();
+  worktreeRegistry.stop();
   ghosttyFocusWatcher.stop();
   usageWatcher.stop();
   process.exit(0);

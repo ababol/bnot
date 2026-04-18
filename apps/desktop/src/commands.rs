@@ -108,6 +108,15 @@ pub fn resume_session<R: Runtime>(app: AppHandle<R>, session_id: String, project
 }
 
 #[command]
+pub fn open_worktree_path<R: Runtime>(app: AppHandle<R>, path: String) {
+    let sidecar = app.state::<crate::sidecar::SidecarManager>();
+    sidecar.send_request(
+        "openWorktreePath",
+        serde_json::json!({ "path": path }),
+    );
+}
+
+#[command]
 pub fn open_settings() {
     let home = std::env::var("HOME").unwrap_or_default();
     let config_path = format!("{home}/.bnot/config.json");

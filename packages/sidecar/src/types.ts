@@ -186,6 +186,15 @@ export interface HistorySession {
   modified: string;
 }
 
+// Worktree registry entry — one row in the Worktrees tab.
+export interface WorktreeRecord {
+  path: string;
+  repoName: string;
+  branch: string;
+  lastActivity: number;
+  activeSessionId?: string;
+}
+
 // IPC protocol between Tauri and sidecar
 export interface IpcRequest {
   id: number;

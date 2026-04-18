@@ -161,7 +161,7 @@ export class WorktreeCreator {
     return { success: true, path: worktreePath };
   }
 
-  private async launchOrJump(worktreePath: string): Promise<void> {
+  async launchOrJump(worktreePath: string): Promise<void> {
     const active = Object.values(this.sessionManager.sessions).find(
       (s) => s.workingDirectory === worktreePath && s.status !== "completed",
     );

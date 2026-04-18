@@ -19,8 +19,9 @@ export function formatIdle(ms: number): string {
   return `${h}h${rm}m ago`;
 }
 
-export function formatRelativeTime(isoDate: string): string {
-  const ms = Date.now() - new Date(isoDate).getTime();
+export function formatRelativeTime(when: string | number): string {
+  const whenMs = typeof when === "number" ? when : new Date(when).getTime();
+  const ms = Date.now() - whenMs;
   const minutes = Math.floor(ms / 60000);
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes}m ago`;

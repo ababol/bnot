@@ -129,9 +129,9 @@ export default function CompactView({ notchWidth }: Props) {
           <div className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-surface-active text-[11px] font-bold tabular-nums text-text-secondary">
             {sessionCount}
           </div>
-        ) : state.history.length > 0 ? (
+        ) : state.worktrees.length > 0 ? (
           <div className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-surface text-[11px] font-bold tabular-nums text-text-dim">
-            {state.history.length}
+            {state.worktrees.length}
           </div>
         ) : null}
       </div>

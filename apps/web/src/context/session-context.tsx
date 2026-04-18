@@ -1,17 +1,21 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from "react";
 import type {
   AgentSession,
-  HistorySession,
   HookHealthReport,
   PanelState,
   UsageSnapshot,
+  ViewMode,
+  WorktreeRecord,
 } from "./types";
 
 interface SessionState {
   sessions: Record<string, AgentSession>;
   heroSessionId: string | null;
   panelState: PanelState;
-  history: HistorySession[];
+  worktrees: WorktreeRecord[];
+  view: ViewMode;
+  sessionsCursor: number;
+  worktreesCursor: number;
   hookHealth: HookHealthReport | null;
   usageStats: UsageSnapshot | null;
 }
@@ -23,7 +27,10 @@ export type SessionAction =
       heroId: string | null;
     }
   | { type: "SET_PANEL_STATE"; panelState: PanelState }
-  | { type: "UPDATE_HISTORY"; history: HistorySession[] }
+  | { type: "UPDATE_WORKTREES"; worktrees: WorktreeRecord[] }
+  | { type: "SET_VIEW"; view: ViewMode }
+  | { type: "SET_SESSIONS_CURSOR"; cursor: number }
+  | { type: "SET_WORKTREES_CURSOR"; cursor: number }
   | { type: "SET_HOOK_HEALTH"; hookHealth: HookHealthReport }
   | { type: "SET_USAGE_STATS"; usageStats: UsageSnapshot };
 
@@ -31,10 +38,20 @@ const initialState: SessionState = {
   sessions: {},
   heroSessionId: null,
   panelState: "compact",
-  history: [],
+  worktrees: [],
+  view: "sessions",
+  sessionsCursor: 0,
+  worktreesCursor: 0,
   hookHealth: null,
   usageStats: null,
 };
+
+function clampCursor(cursor: number, length: number): number {
+  if (length <= 0) return 0;
+  if (cursor < 0) return 0;
+  if (cursor >= length) return length - 1;
+  return cursor;
+}
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
@@ -43,11 +60,28 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         ...state,
         sessions: action.sessions,
         heroSessionId: action.heroId,
+        sessionsCursor: clampCursor(state.sessionsCursor, Object.keys(action.sessions).length),
       };
     case "SET_PANEL_STATE":
       return { ...state, panelState: action.panelState };
-    case "UPDATE_HISTORY":
-      return { ...state, history: action.history };
+    case "UPDATE_WORKTREES":
+      return {
+        ...state,
+        worktrees: action.worktrees,
+        worktreesCursor: clampCursor(state.worktreesCursor, action.worktrees.length),
+      };
+    case "SET_VIEW":
+      return { ...state, view: action.view };
+    case "SET_SESSIONS_CURSOR":
+      return {
+        ...state,
+        sessionsCursor: clampCursor(action.cursor, Object.keys(state.sessions).length),
+      };
+    case "SET_WORKTREES_CURSOR":
+      return {
+        ...state,
+        worktreesCursor: clampCursor(action.cursor, state.worktrees.length),
+      };
     case "SET_HOOK_HEALTH":
       return { ...state, hookHealth: action.hookHealth };
     case "SET_USAGE_STATS":

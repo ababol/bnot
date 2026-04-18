@@ -28,10 +28,7 @@ function cwdConflict(expected: string | undefined, live: string | undefined): bo
 }
 
 /** ms-epoch values are never 0 in practice, so the falsy guards are safe. */
-function startTimeConflict(
-  expected: number | undefined,
-  live: number | null | undefined,
-): boolean {
+function startTimeConflict(expected: number | undefined, live: number | null | undefined): boolean {
   return !!expected && !!live && expected !== live;
 }
 

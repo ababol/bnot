@@ -120,9 +120,7 @@ export class TranscriptWatcher {
       if (Array.isArray(content)) {
         return content.some(
           (b: { type?: string; text?: string }) =>
-            b?.type === "text" &&
-            typeof b?.text === "string" &&
-            b.text.includes(INTERRUPT_MARKER),
+            b?.type === "text" && typeof b?.text === "string" && b.text.includes(INTERRUPT_MARKER),
         );
       }
     } catch {

@@ -10,6 +10,8 @@ const MAX_HISTORY = 20;
 
 export class HistoryScanner {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private listeners = new Set<(history: HistorySession[]) => void>();
+  latest: HistorySession[] = [];
 
   start() {
     // Initial scan after a short delay to let ProcessScanner populate first
@@ -26,11 +28,19 @@ export class HistoryScanner {
     void this.scan();
   }
 
+  /** Subscribe to scan completions (used by WorktreeRegistry to refresh). */
+  onUpdate(listener: (history: HistorySession[]) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
   private async scan() {
     try {
       const activeSessionIds = await this.getActiveSessionIds();
       const history = await this.readAllHistory(activeSessionIds);
+      this.latest = history;
       emit("historyUpdated", { history });
+      for (const listener of this.listeners) listener(history);
     } catch {
       // Silently ignore — history is best-effort
     }

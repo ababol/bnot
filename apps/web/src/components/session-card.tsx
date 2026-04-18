@@ -27,10 +27,11 @@ import StatusIndicator from "./status-indicator";
 interface Props {
   session: AgentSession;
   isHero: boolean;
+  isCursor?: boolean;
   onClick: () => void;
 }
 
-export default function SessionCard({ session, isHero, onClick }: Props) {
+export default function SessionCard({ session, isHero, isCursor, onClick }: Props) {
   const { state, dispatch } = useSession();
   // Collapse based on the sessions that remain after this one is resolved, so
   // we go straight to the right target (alert if others still need attention,
@@ -170,7 +171,9 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
   return (
     <div
       onClick={onClick}
-      className={`cursor-pointer rounded-lg p-2.5 transition-colors ${isHero ? "bg-surface-hover" : "bg-surface"} hover:bg-surface-hover`}
+      className={`cursor-pointer rounded-lg p-2.5 transition-colors ${isHero ? "bg-surface-hover" : "bg-surface"} hover:bg-surface-hover ${
+        isCursor ? "ring-1 ring-white/20" : ""
+      }`}
     >
       {/* Top row */}
       <div className="flex items-center gap-1.5">

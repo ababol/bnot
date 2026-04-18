@@ -5,10 +5,10 @@ import type { SessionAction } from "../context/session-context";
 import {
   PANEL_STATES,
   type AgentSession,
-  type HistorySession,
   type HookHealthReport,
   type PanelState,
   type UsageSnapshot,
+  type WorktreeRecord,
 } from "../context/types";
 import { playSound } from "../lib/sound";
 import { collapsePanel, setPanelState } from "../lib/tauri";
@@ -65,8 +65,8 @@ export function useTauriEvents(
       setPanelState(dispatch, raw);
     }).then((u) => unlisten.push(u));
 
-    listen<{ history: HistorySession[] }>("historyUpdated", (event) => {
-      dispatch({ type: "UPDATE_HISTORY", history: event.payload.history });
+    listen<{ worktrees: WorktreeRecord[] }>("worktreesUpdated", (event) => {
+      dispatch({ type: "UPDATE_WORKTREES", worktrees: event.payload.worktrees });
     }).then((u) => unlisten.push(u));
 
     listen<HookHealthReport>("hookHealth", (event) => {
