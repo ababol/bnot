@@ -86,6 +86,7 @@ export interface AgentSession {
   sessionFilePath?: string;
   tty?: string;
   processPid?: number;
+  processStartedAt?: number;
   cpuPercent: number;
   gitBranch?: string;
   gitWorktree?: string;

@@ -27,6 +27,19 @@ function cwdConflict(expected: string | undefined, live: string | undefined): bo
   return !!expected && expected !== UNKNOWN_CWD && !!live && live !== expected;
 }
 
+/** ms-epoch values are never 0 in practice, so the falsy guards are safe. */
+function startTimeConflict(
+  expected: number | undefined,
+  live: number | null | undefined,
+): boolean {
+  return !!expected && !!live && expected !== live;
+}
+
+interface SessionIdentity {
+  workingDirectory?: string;
+  processStartedAt?: number;
+}
+
 interface ProcessInfo {
   pid: number;
   parentPid: number;
@@ -34,7 +47,9 @@ interface ProcessInfo {
   terminal: string | null;
   tty: string | null;
   cpuPercent: number;
-  startedAt: number;
+  /** ms-epoch from `ps -o lstart=`. Null when the lookup or parse failed
+   *  — callers must not synthesize a fallback (would poison identity). */
+  startedAt: number | null;
   gitBranch: string | null;
   gitWorktree: string | null;
   gitRepoName: string | null;
@@ -109,6 +124,9 @@ export class ProcessScanner {
       const hook = this.sm.sessions[candidate];
       if (!hook) continue;
       if (cwdConflict(hook.workingDirectory, info.cwd ?? undefined)) continue;
+      // Don't let push-live overwrite hook data when the pid was recycled; the
+      // orphan loop will reap the dead hook on its own.
+      if (startTimeConflict(hook.processStartedAt, info.startedAt)) continue;
       hookForLivePid.set(info.pid, candidate);
     }
 
@@ -124,13 +142,14 @@ export class ProcessScanner {
           terminalPid: info.parentPid,
           terminalApp: info.terminal ?? undefined,
           status: "active",
-          startedAt: info.startedAt,
+          startedAt: info.startedAt ?? Date.now(),
           lastActivity: Date.now(),
           contextTokens: 0,
           maxContextTokens: 0,
           cpuPercent: 0,
           tty: info.tty ?? undefined,
           processPid: info.pid,
+          processStartedAt: info.startedAt ?? undefined,
           gitBranch: info.gitBranch ?? undefined,
           gitWorktree: info.gitWorktree ?? undefined,
           gitRepoName: info.gitRepoName ?? undefined,
@@ -142,6 +161,8 @@ export class ProcessScanner {
       this.sm.setStatus(sessionId, "active");
       this.sm.sessions[sessionId].tty = info.tty ?? undefined;
       this.sm.sessions[sessionId].processPid = info.pid;
+      this.sm.sessions[sessionId].processStartedAt =
+        info.startedAt ?? this.sm.sessions[sessionId].processStartedAt;
       this.sm.sessions[sessionId].cpuPercent = info.cpuPercent;
       this.sm.sessions[sessionId].gitBranch = info.gitBranch ?? undefined;
       this.sm.sessions[sessionId].gitWorktree = info.gitWorktree ?? undefined;
@@ -175,7 +196,14 @@ export class ProcessScanner {
           }
           const isOrphan =
             pid !== undefined &&
-            !(await this.pidIsClaude(pid, session.workingDirectory, activeByPid));
+            !(await this.pidIsClaude(
+              pid,
+              {
+                workingDirectory: session.workingDirectory,
+                processStartedAt: session.processStartedAt,
+              },
+              activeByPid,
+            ));
           return { id, isOrphan };
         }),
     );
@@ -211,12 +239,13 @@ export class ProcessScanner {
       if (!hookId || hookId === id) continue;
 
       const kept = this.sm.sessions[hookId];
-      // pid reuse guard: if the live proc and the hook session disagree on
-      // cwd, hookByClaudePid is stale — a different Claude now owns this pid.
-      // Leave the proc- session alone; the orphan loop will reap the dead hook.
+      // pid reuse guard: cwd or start-time mismatch means a different Claude
+      // now owns this pid. Leave the proc- session alone; orphan loop reaps.
       if (cwdConflict(kept.workingDirectory, proc.workingDirectory)) continue;
+      if (startTimeConflict(kept.processStartedAt, proc.processStartedAt)) continue;
       if (proc.tty) kept.tty = proc.tty;
       if (proc.processPid) kept.processPid = proc.processPid;
+      if (proc.processStartedAt) kept.processStartedAt = proc.processStartedAt;
       if (proc.cpuPercent) kept.cpuPercent = proc.cpuPercent;
       if (proc.terminalApp) kept.terminalApp = proc.terminalApp;
       if (proc.gitBranch) kept.gitBranch = proc.gitBranch;
@@ -248,6 +277,7 @@ export class ProcessScanner {
       if (!hookSession) continue;
       hookSession.tty = info.tty ?? undefined;
       hookSession.processPid = info.pid;
+      hookSession.processStartedAt = info.startedAt ?? hookSession.processStartedAt;
       hookSession.cpuPercent = info.cpuPercent;
       if (hookSession.tty && !hookSession.ghosttyTerminalId) {
         this.sm.tryCaptureTerminalId(hookSession);
@@ -367,22 +397,32 @@ export class ProcessScanner {
   }
 
   /**
-   * True iff `pid` is alive AND still owned by THIS session's Claude. The
-   * `activeByPid` map is the fast path: if pid maps to a tracked Claude with
-   * the same cwd, it's the same process. Cwd mismatch means pid was recycled
-   * to a different Claude. For pids alive but missing from the map, fall back
-   * to a direct `ps comm` lookup so a transient enrichment miss doesn't
-   * incorrectly orphan a live session.
+   * True iff `pid` is alive AND still owned by THIS session's Claude.
+   * The fallback (pid alive but absent from `activeByPid`) does a live
+   * cwd + start-time lookup rather than trusting comm — a recycled pid can
+   * land on a Claude variant excluded from `findClaudeProcesses` (--print,
+   * --no-session+--resume, claude-code-guide subagents), defeating a
+   * comm-only check.
    */
   private async pidIsClaude(
     pid: number,
-    expectedCwd: string | undefined,
+    expected: SessionIdentity,
     activeByPid: Map<number, ProcessInfo>,
   ): Promise<boolean> {
     if (!isPidAlive(pid)) return false;
+
     const live = activeByPid.get(pid);
-    if (live) return !cwdConflict(expectedCwd, live.cwd ?? undefined);
-    return basename(await this.getComm(pid)) === "claude";
+    if (live) {
+      if (cwdConflict(expected.workingDirectory, live.cwd ?? undefined)) return false;
+      if (startTimeConflict(expected.processStartedAt, live.startedAt)) return false;
+      return true;
+    }
+
+    if (basename(await this.getComm(pid)) !== "claude") return false;
+    const [liveCwd, liveStart] = await Promise.all([this.getCwd(pid), this.getStartTime(pid)]);
+    if (cwdConflict(expected.workingDirectory, liveCwd ?? undefined)) return false;
+    if (startTimeConflict(expected.processStartedAt, liveStart)) return false;
+    return true;
   }
 
   private async getComm(pid: number): Promise<string> {
@@ -441,14 +481,14 @@ export class ProcessScanner {
     }
   }
 
-  private async getStartTime(pid: number): Promise<number> {
+  private async getStartTime(pid: number): Promise<number | null> {
     try {
       // lstart gives the exact start time, e.g. "Mon Apr  6 22:50:00 2026"
       const { stdout } = await exec("/bin/ps", ["-o", "lstart=", "-p", String(pid)]);
       const t = new Date(stdout.trim()).getTime();
-      return isNaN(t) ? Date.now() : t;
+      return isNaN(t) ? null : t;
     } catch {
-      return Date.now();
+      return null;
     }
   }
 

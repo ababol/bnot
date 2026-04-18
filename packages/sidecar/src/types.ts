@@ -158,6 +158,10 @@ export interface AgentSession {
   sessionFilePath?: string;
   tty?: string;
   processPid?: number;
+  /** lstart-derived ms-epoch of the underlying Claude process. Distinct from
+   *  `startedAt` (when Bnot first saw the session). Used as a third identity
+   *  dimension alongside pid + cwd to detect pid recycling. */
+  processStartedAt?: number;
   cpuPercent: number;
   gitBranch?: string;
   gitWorktree?: string;
