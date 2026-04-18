@@ -373,15 +373,17 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
         </div>
       ) : isHero ? (
         /* Hero details (non-approval) */
-        <div className="mt-1">
-          {session.currentTool && session.currentTool !== "Unknown" ? (
+        <div className="mt-1 flex flex-col gap-1">
+          {session.currentTool ? (
             <div className="flex gap-1 font-mono text-[11px] text-bnot-cyan">
               <span className="font-medium">{session.currentTool}</span>
               {session.currentFilePath && (
                 <span className="text-text-dim">{shortenPath(session.currentFilePath)}</span>
               )}
             </div>
-          ) : (
+          ) : working || idle ? null : (
+            // working/napping is already conveyed by the spinner/zzz indicator;
+            // only show text for non-active states (approval/answer/done/error).
             <div
               className={`font-mono text-[11px] opacity-80 ${STATUS_TEXT_COLORS[session.status]}`}
             >
@@ -390,14 +392,14 @@ export default function SessionCard({ session, isHero, onClick }: Props) {
           )}
 
           <div
-            className="mt-0.5 truncate font-mono text-[10px] text-text-dim"
+            className="truncate font-mono text-[10px] text-text-dim"
             dir="rtl"
             style={{ textAlign: "left" }}
           >
             {session.workingDirectory}
           </div>
 
-          <div className="mt-1.5 flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             <div className="flex-1">
               <PixelProgressBar
                 percent={contextPercent(session)}

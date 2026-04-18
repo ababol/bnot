@@ -1,7 +1,7 @@
 import { execFile } from "child_process";
 import { basename } from "path";
 import { promisify } from "util";
-import type { SessionManager } from "./session-manager.js";
+import { UNKNOWN_CWD, type SessionManager } from "./session-manager.js";
 
 const exec = promisify(execFile);
 
@@ -19,6 +19,12 @@ function isPidAlive(pid: number): boolean {
   } catch {
     return false;
   }
+}
+
+/** True when both cwds are known (non-empty, non-placeholder) and disagree.
+ *  Used as a "different process" signal across the pid-identity checks below. */
+function cwdConflict(expected: string | undefined, live: string | undefined): boolean {
+  return !!expected && expected !== UNKNOWN_CWD && !!live && live !== expected;
 }
 
 interface ProcessInfo {
@@ -74,6 +80,7 @@ export class ProcessScanner {
 
   private async scan() {
     const activePids = await this.findClaudeProcesses();
+    const activeByPid = new Map(activePids.map((p) => [p.pid, p] as const));
 
     // Build the pid → hook-session lookup once up-front. When a hook session
     // already represents a Claude pid, we must NOT (re)create a proc-<pid>
@@ -88,10 +95,27 @@ export class ProcessScanner {
       if (s.processPid != null) hookByClaudePid[s.processPid] = id;
     }
 
+    // Resolve each live pid to a hook session once, up-front, so the skip-create
+    // and push-live loops below see consistent matches even if `this.sm.sessions`
+    // mutates mid-scan (the orphan check awaits, and inbound hook events can
+    // land in between). pid alone is not a stable identity — macOS recycles
+    // pids, so a recycled pid taken over by a different Claude would otherwise
+    // silently keep updating the dead hook session. Cwd disagreement = different
+    // process, no match.
+    const hookForLivePid = new Map<number, string>();
+    for (const info of activePids) {
+      const candidate = hookByClaudePid[info.pid];
+      if (!candidate) continue;
+      const hook = this.sm.sessions[candidate];
+      if (!hook) continue;
+      if (cwdConflict(hook.workingDirectory, info.cwd ?? undefined)) continue;
+      hookForLivePid.set(info.pid, candidate);
+    }
+
     // Add / update proc-<pid> sessions. Skip any pid that's already
     // represented by a hook session (see comment above).
     for (const info of activePids) {
-      if (hookByClaudePid[info.pid]) continue;
+      if (hookForLivePid.has(info.pid)) continue;
       const sessionId = `proc-${info.pid}`;
       if (!this.sm.sessions[sessionId]) {
         this.sm.sessions[sessionId] = {
@@ -129,11 +153,11 @@ export class ProcessScanner {
     }
 
     // Mark completed and schedule deletion if process gone. We check
-    // kill(pid, 0) for cheap liveness, but also cross-check that the pid
-    // still maps to a `claude` process — macOS recycles pids, and a stale
+    // kill(pid, 0) for cheap liveness, then cross-check the pid still maps
+    // to a `claude` AND its cwd matches — macOS recycles pids, and a stale
     // session whose original Claude died can sit forever pointing at a
-    // recycled pid that kill(pid, 0) reports as "alive".
-    const activePidSet = new Set(activePids.map((p) => p.pid));
+    // recycled pid that kill(pid, 0) reports as "alive" (potentially even
+    // owned by another Claude, which would defeat a comm-only check).
     const orphanChecks = await Promise.all(
       Object.entries(this.sm.sessions)
         .filter(([id]) => !this.pendingDeletions.has(id))
@@ -149,7 +173,9 @@ export class ProcessScanner {
             // (the Claude that spawned the hook).
             pid = session.terminalPid;
           }
-          const isOrphan = pid !== undefined && !(await this.pidIsClaude(pid, activePidSet));
+          const isOrphan =
+            pid !== undefined &&
+            !(await this.pidIsClaude(pid, session.workingDirectory, activeByPid));
           return { id, isOrphan };
         }),
     );
@@ -185,6 +211,10 @@ export class ProcessScanner {
       if (!hookId || hookId === id) continue;
 
       const kept = this.sm.sessions[hookId];
+      // pid reuse guard: if the live proc and the hook session disagree on
+      // cwd, hookByClaudePid is stale — a different Claude now owns this pid.
+      // Leave the proc- session alone; the orphan loop will reap the dead hook.
+      if (cwdConflict(kept.workingDirectory, proc.workingDirectory)) continue;
       if (proc.tty) kept.tty = proc.tty;
       if (proc.processPid) kept.processPid = proc.processPid;
       if (proc.cpuPercent) kept.cpuPercent = proc.cpuPercent;
@@ -212,7 +242,7 @@ export class ProcessScanner {
     // into pre-existing sessions). On later scans: inject /color + capture id
     // for brand-new sessions.
     for (const info of activePids) {
-      const hookId = hookByClaudePid[info.pid];
+      const hookId = hookForLivePid.get(info.pid);
       if (!hookId) continue;
       const hookSession = this.sm.sessions[hookId];
       if (!hookSession) continue;
@@ -337,15 +367,21 @@ export class ProcessScanner {
   }
 
   /**
-   * True iff `pid` is alive AND still owned by a `claude` process.
-   * `activePidSet` is the cheap fast-path: pids we just confirmed via the
-   * Claude-only scan. For pids alive but missing from the set, we fall back
-   * to a direct `ps comm` lookup to distinguish a transient enrichment miss
-   * (still claude) from a recycled pid (not claude → orphan).
+   * True iff `pid` is alive AND still owned by THIS session's Claude. The
+   * `activeByPid` map is the fast path: if pid maps to a tracked Claude with
+   * the same cwd, it's the same process. Cwd mismatch means pid was recycled
+   * to a different Claude. For pids alive but missing from the map, fall back
+   * to a direct `ps comm` lookup so a transient enrichment miss doesn't
+   * incorrectly orphan a live session.
    */
-  private async pidIsClaude(pid: number, activePidSet: Set<number>): Promise<boolean> {
+  private async pidIsClaude(
+    pid: number,
+    expectedCwd: string | undefined,
+    activeByPid: Map<number, ProcessInfo>,
+  ): Promise<boolean> {
     if (!isPidAlive(pid)) return false;
-    if (activePidSet.has(pid)) return true;
+    const live = activeByPid.get(pid);
+    if (live) return !cwdConflict(expectedCwd, live.cwd ?? undefined);
     return basename(await this.getComm(pid)) === "claude";
   }
 

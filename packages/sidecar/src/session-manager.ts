@@ -10,6 +10,11 @@ const exec = promisify(execFile);
 const DEBOUNCE_MS = 50;
 const COMPLETED_MIN_MS = 5000;
 
+/** Placeholder workingDirectory written by ensureSession() when a hook event
+ *  arrives before any sessionStart. Real cwds are absolute paths, so this
+ *  sentinel lets pid-identity checks know the cwd is not yet trustworthy. */
+export const UNKNOWN_CWD = "unknown";
+
 const CLAUDE_COLORS = ["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
 
 function djb2(s: string): number {
@@ -117,12 +122,12 @@ export class SessionManager {
           if (p.taskName) this.sessions[sessionId].taskName = p.taskName;
           if (p.terminalApp) this.sessions[sessionId].terminalApp = p.terminalApp;
           if (p.terminalPid) this.sessions[sessionId].terminalPid = p.terminalPid;
-          // Correct the "unknown" placeholder left by ensureSession() when a hook
+          // Correct the UNKNOWN_CWD placeholder left by ensureSession() when a hook
           // event arrived before any sessionStart (e.g., Notify/Stop).
           if (
             p.workingDirectory &&
-            p.workingDirectory !== "unknown" &&
-            this.sessions[sessionId].workingDirectory === "unknown"
+            p.workingDirectory !== UNKNOWN_CWD &&
+            this.sessions[sessionId].workingDirectory === UNKNOWN_CWD
           ) {
             this.sessions[sessionId].workingDirectory = p.workingDirectory;
           }
@@ -538,7 +543,7 @@ return terminalId`;
     if (!this.sessions[sessionId]) {
       this.sessions[sessionId] = {
         id: sessionId,
-        workingDirectory: "unknown",
+        workingDirectory: UNKNOWN_CWD,
         status: "active",
         startedAt: Date.now(),
         lastActivity: new Date(timestamp).getTime(),
