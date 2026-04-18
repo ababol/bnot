@@ -57,6 +57,18 @@ export class SessionManager {
     if (status === "completed") this.completedAt[sessionId] = Date.now();
   }
 
+  /** Called by TranscriptWatcher when the JSONL contains an Esc-interrupt
+   *  marker. PostToolUse never fires for the interrupted tool, so currentTool
+   *  would otherwise stay set forever. */
+  applyInterrupt(sessionId: string) {
+    const s = this.sessions[sessionId];
+    if (!s) return;
+    if (!s.isThinking && s.currentTool === undefined) return;
+    s.isThinking = false;
+    s.currentTool = undefined;
+    this.emitUpdate();
+  }
+
   emitUpdate() {
     // Debounce: coalesce rapid updates into one event
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
@@ -99,6 +111,7 @@ export class SessionManager {
               if (existingId.startsWith("proc-")) continue;
               if (existing.terminalPid === p.terminalPid) {
                 if (this.heroSessionId === existingId) this.heroSessionId = sessionId;
+                this.transcriptWatcher.detach(existingId);
                 delete this.sessions[existingId];
                 break;
               }
@@ -111,7 +124,6 @@ export class SessionManager {
             terminalApp: p.terminalApp,
             terminalPid: p.terminalPid,
             ghosttyTerminalId: p.ghosttyTerminalId,
-            transcriptPath: p.transcriptPath,
             status: "active",
             startedAt: Date.now(),
             lastActivity: new Date(timestamp).getTime(),
@@ -125,7 +137,6 @@ export class SessionManager {
           if (p.taskName) this.sessions[sessionId].taskName = p.taskName;
           if (p.terminalApp) this.sessions[sessionId].terminalApp = p.terminalApp;
           if (p.terminalPid) this.sessions[sessionId].terminalPid = p.terminalPid;
-          if (p.transcriptPath) this.sessions[sessionId].transcriptPath = p.transcriptPath;
           // Correct the UNKNOWN_CWD placeholder left by ensureSession() when a hook
           // event arrived before any sessionStart (e.g., Notify/Stop).
           if (

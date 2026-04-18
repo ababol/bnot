@@ -95,7 +95,6 @@ export interface AgentSession {
   sessionName?: string;
   agentColor?: string;
   claudeSessionId?: string;
-  transcriptPath?: string;
 }
 
 // History session for resume after restart

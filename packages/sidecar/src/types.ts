@@ -172,9 +172,6 @@ export interface AgentSession {
   agentColor?: string;
   claudeSessionId?: string;
   ghosttyTerminalId?: string;
-  /** Filesystem path to Claude Code's JSONL transcript for this session.
-   *  Tailed by TranscriptWatcher to detect Esc-interrupts (no hook fires). */
-  transcriptPath?: string;
 }
 
 // History session from ~/.claude/projects/*/sessions-index.json

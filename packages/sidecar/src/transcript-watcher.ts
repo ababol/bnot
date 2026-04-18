@@ -78,13 +78,13 @@ export class TranscriptWatcher {
     }
     t.pending = true;
     try {
-      const st = await stat(t.path);
-      // File rotated/truncated (auto-compact rewrites the JSONL).
-      if (st.size < t.offset) t.offset = 0;
-      if (st.size === t.offset) return;
-
       const fd = await open(t.path, "r");
       try {
+        const st = await fd.stat();
+        // File rotated/truncated (auto-compact rewrites the JSONL).
+        if (st.size < t.offset) t.offset = 0;
+        if (st.size === t.offset) return;
+
         const buf = Buffer.alloc(st.size - t.offset);
         await fd.read(buf, 0, buf.length, t.offset);
         t.offset = st.size;
@@ -94,7 +94,7 @@ export class TranscriptWatcher {
         for (const line of buf.toString("utf8").split("\n")) {
           if (!line || !line.includes(INTERRUPT_MARKER)) continue;
           if (this.isInterruptLine(line)) {
-            this.applyInterrupt(sessionId);
+            this.sm.applyInterrupt(sessionId);
             break;
           }
         }
@@ -129,15 +129,5 @@ export class TranscriptWatcher {
       // malformed line — skip
     }
     return false;
-  }
-
-  private applyInterrupt(sessionId: string): void {
-    const session = this.sm.sessions[sessionId];
-    if (!session) return;
-    session.isThinking = false;
-    // Esc during a tool call skips PostToolUse, so currentTool would otherwise
-    // stay set forever.
-    session.currentTool = undefined;
-    this.sm.emitUpdate();
   }
 }
