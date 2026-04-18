@@ -11,6 +11,10 @@ cargo check            # Check Rust workspace only
 
 Requires: macOS 14+, Rust (rustup), Node.js 22+, pnpm.
 
+## Release
+
+Use the `/release` skill (`.claude/skills/release/SKILL.md`). It pushes `main` and runs `gh release create`, which triggers `.github/workflows/release.yml`. The workflow reads the version from the release tag and writes it into `apps/desktop/tauri.conf.json` + `apps/desktop/Cargo.toml` in the runner only — **never bump any `version` field in the repo manually**.
+
 ## Project Structure
 
 ```
