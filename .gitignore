@@ -20,6 +20,7 @@ packages/sidecar/dist/
 
 # Extension
 packages/extension/*.zip
+bnot-extension-*.zip
 
 # LLMs
 .claude/worktrees
