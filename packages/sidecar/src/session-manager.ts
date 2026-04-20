@@ -4,7 +4,7 @@ import { basename } from "path";
 import { promisify } from "util";
 import { emit } from "./ipc.js";
 import { TranscriptWatcher } from "./transcript-watcher.js";
-import type { AgentSession, SessionMode, SocketMessage } from "./types.js";
+import type { AgentSession, MessageType, SessionMode, SocketMessage } from "./types.js";
 
 const exec = promisify(execFile);
 
@@ -17,6 +17,16 @@ const COMPLETED_MIN_MS = 5000;
 export const UNKNOWN_CWD = "unknown";
 
 const CLAUDE_COLORS = ["green", "blue", "orange", "cyan", "purple", "pink", "yellow", "red"];
+
+/** Hooks fired during a turn that can arrive after sessionEnd, since hooks are
+ *  async and socket arrival order isn't guaranteed. Suppressed when the session
+ *  is in idleSessions to avoid re-arming isThinking on a finished turn. */
+const STALE_TURN_EVENTS = new Set<MessageType>([
+  "preToolUse",
+  "subagentStart",
+  "subagentStop",
+  "preCompact",
+]);
 
 function djb2(s: string): number {
   let h = 5381;
@@ -99,6 +109,8 @@ export class SessionManager {
     // Defense-in-depth: the bridge also filters this, but it's a separate process.
     if (sessionType === "agent") return;
 
+    if (STALE_TURN_EVENTS.has(type) && this.idleSessions.has(sessionId)) return;
+
     switch (type) {
       case "sessionStart": {
         const p = payload.sessionStart;
@@ -113,6 +125,7 @@ export class SessionManager {
                 if (this.heroSessionId === existingId) this.heroSessionId = sessionId;
                 this.transcriptWatcher.detach(existingId);
                 delete this.sessions[existingId];
+                this.idleSessions.delete(existingId);
                 break;
               }
             }
@@ -158,8 +171,6 @@ export class SessionManager {
       case "preToolUse": {
         const p = payload.preToolUse;
         if (!p) break;
-        // Discard stale events from a completed turn that arrived after sessionEnd
-        if (this.idleSessions.has(sessionId)) return;
         this.ensureSession(sessionId, timestamp);
         this.sessions[sessionId].lastActivity = new Date(timestamp).getTime();
         this.sessions[sessionId].currentTool = p.toolName;
@@ -292,6 +303,9 @@ export class SessionManager {
           this.sessions[sessionId].isThinking = false;
           this.sessions[sessionId].currentTool = undefined;
         }
+        // Suppress STALE_TURN_EVENTS until the next userPromptSubmit clears the flag,
+        // otherwise a late hook from this turn would re-arm isThinking.
+        this.idleSessions.add(sessionId);
         delete this.pendingApprovalClients[sessionId];
         break;
       }
@@ -306,9 +320,11 @@ export class SessionManager {
       }
 
       case "stopFailure": {
+        // The Stop hook failed — the session did NOT cleanly stop, so don't
+        // mark it completed (would also block status transitions for 5s via
+        // COMPLETED_MIN_MS). Just clear in-flight thinking like sessionEnd.
         if (this.sessions[sessionId]) {
           this.sessions[sessionId].isThinking = false;
-          this.setStatus(sessionId, "completed");
           this.sessions[sessionId].currentTool = undefined;
         }
         delete this.pendingApprovalClients[sessionId];
