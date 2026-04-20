@@ -26,3 +26,4 @@ bnot-extension-*.zip
 .claude/worktrees
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.playwright-mcp/

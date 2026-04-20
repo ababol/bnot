@@ -1,0 +1,164 @@
+/* ------------------------------------------------------------------ */
+/* Fake terminal window — one Ghostty-style window with one tab per   */
+/* running Claude session. The `elevated` variant fills the device    */
+/* frame (used on the Resume tab where the terminal is the hero).     */
+/* ------------------------------------------------------------------ */
+
+.wrap {
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  transform: translateX(-50%);
+  width: clamp(420px, 64%, 620px);
+  pointer-events: none;
+  z-index: 5;
+  transition:
+    width 0.55s var(--dn-spring),
+    height 0.55s var(--dn-spring),
+    bottom 0.55s var(--dn-spring);
+}
+.wrapElevated {
+  bottom: 6%;
+  width: clamp(500px, 76%, 760px);
+  height: 72%;
+  z-index: 20;
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    width: clamp(280px, 88%, 480px);
+    bottom: 10%;
+  }
+}
+
+.terminal {
+  width: 100%;
+  border-radius: 12px;
+  background: rgba(10, 10, 12, 0.96);
+  border: 1px solid var(--color-page-border);
+  overflow: hidden;
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+  box-shadow:
+    0 28px 60px -20px rgba(0, 0, 0, 0.7),
+    0 8px 18px -8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 var(--alpha-white-06);
+}
+.terminalElevated {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.chrome {
+  border-bottom: 1px solid var(--alpha-white-06);
+  background: linear-gradient(to bottom, var(--color-surface), transparent);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  max-width: 180px;
+  line-height: 1.2;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+.tab:hover {
+  color: rgba(255, 255, 255, 0.85);
+  background: var(--color-surface);
+}
+.tabActive,
+.tabActive:hover {
+  background: var(--color-surface-hover);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 var(--alpha-white-10);
+}
+
+@media (max-width: 640px) {
+  .tab {
+    font-size: 10px;
+    max-width: 120px;
+  }
+}
+
+.tabDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  box-shadow: 0 0 4px currentColor;
+}
+
+.tabLabel {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 640px) {
+  .tabLabel {
+    font-size: 9.5px;
+  }
+}
+
+/* Real terminals flow newest-at-bottom: justify-end pins lines + caret to
+   the bottom edge and lets older output scroll off the top (clipped by
+   overflow:hidden). */
+.body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  min-height: 120px;
+  max-height: 200px;
+}
+
+/* flex-shrink:0 stops column-flex from compressing rows and clipping
+   descenders on g/p/y; per-row overflow + ellipsis keeps long lines
+   from bleeding past the terminal body's right edge. */
+.body > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.bodyElevated {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  white-space: pre;
+}
+
+@media (max-width: 640px) {
+  .body {
+    font-size: 10px;
+    min-height: 90px;
+    max-height: 140px;
+  }
+}
+
+.caret {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  line-height: 1.6;
+  animation: blinkCaret 1s steps(1, end) infinite;
+}

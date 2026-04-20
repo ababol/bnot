@@ -1,0 +1,83 @@
+/* ------------------------------------------------------------------ */
+/* Dynamic Notch — morphing notch panel.                              */
+/* Descendants inherit the --color-* overrides below so the bnot      */
+/* panel keeps its authentic dark surface/text tokens even though the */
+/* surrounding marketing page lives in a lighter theme.               */
+/* ------------------------------------------------------------------ */
+
+.notch {
+  /* Dark-panel overrides — surface alpha drops to 3% on the pure-black
+     notch background (vs 4% on the page surface). hover/active inherit. */
+  --color-surface: rgba(255, 255, 255, 0.03);
+  --color-text-primary: #ffffff;
+  --color-text-secondary: rgba(255, 255, 255, 0.78);
+  --color-text-muted: rgba(255, 255, 255, 0.6);
+  --color-text-dim: rgba(255, 255, 255, 0.4);
+
+  position: relative;
+  background: #000;
+  color: #fff;
+  width: var(--dn-w, 560px);
+  height: var(--dn-h, 340px);
+  overflow: visible;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.45),
+    0 12px 40px rgba(0, 0, 0, 0.28),
+    0 0 20px rgba(0, 0, 0, 0.08);
+  transition:
+    width 0.6s var(--dn-spring),
+    height 0.6s var(--dn-spring),
+    border-radius 0.4s ease-out,
+    box-shadow 0.4s ease-out;
+  will-change: width, height;
+}
+
+@media (max-width: 640px) {
+  .notch {
+    width: var(--dn-w-mobile, 320px);
+    height: var(--dn-h-mobile, 340px);
+  }
+}
+
+/* Curved wings on either side — Dynamic Island box-shadow trick */
+.notch::before,
+.notch::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 28px;
+  pointer-events: none;
+}
+.notch::before {
+  left: -14px;
+  border-top-right-radius: 8px;
+  box-shadow: 5px 0 0 #000;
+}
+.notch::after {
+  right: -14px;
+  border-top-left-radius: 8px;
+  box-shadow: -5px 0 0 #000;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  opacity: 0;
+  filter: blur(6px);
+  transform: scale(0.96);
+  transition:
+    opacity 0.25s,
+    filter 0.3s,
+    transform 0.35s var(--dn-spring);
+  pointer-events: none;
+}
+.layerActive {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+  pointer-events: auto;
+  transition-delay: 0.06s;
+}

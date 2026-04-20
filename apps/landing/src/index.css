@@ -1,0 +1,370 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Page theme — soft dark marketing surface.                          */
+/* Base bg #07080a, surface lifted to #111214, borders subtle         */
+/* rgba-white. Pure #000 is reserved for the bnot panel chrome.       */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  /* Page surfaces */
+  --color-page-bg: #07080a;
+  --color-page-surface: #111214;
+  --color-page-surface-2: #1b1c1e;
+  --color-page-border: rgba(255, 255, 255, 0.08);
+  --color-page-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Bnot accent colors — identical to apps/web */
+  --color-bnot-green: #22c55e;
+  --color-bnot-green-soft: #4ade80;
+  --color-bnot-orange: #f97316;
+  --color-bnot-blue: #3b82f6;
+  --color-bnot-cyan: #06b6d4;
+  --color-bnot-red: #ef4444;
+  --color-bnot-yellow: #eab308;
+
+  /* Surface tokens. `.dynamic-notch` re-asserts `--color-surface` (3% vs 4%)
+     for the darker panel background; hover/active inherit from here. */
+  --color-surface: rgba(255, 255, 255, 0.04);
+  --color-surface-hover: rgba(255, 255, 255, 0.08);
+  --color-surface-active: rgba(255, 255, 255, 0.12);
+
+  /* `muted` + `dim` stay alpha-white so they read consistently over the
+     chrome/surface tints they sit on; `secondary` is a flat hex because it
+     only ever renders on the page bg. */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #6a6b6c;
+  --color-text-muted: rgba(255, 255, 255, 0.68);
+  --color-text-dim: rgba(255, 255, 255, 0.4);
+
+  /* H1 display treatment — top-lit vertical fade + soft shadow, referenced
+     from hero-copy.tsx inline style (matches the aurora-halo var pattern
+     used further down). */
+  --gradient-display-text: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.82) 100%);
+  --text-shadow-display: 0 2px 8px rgba(0, 0, 0, 0.35);
+
+  /* White-alpha scale — reused 2+ times from raw CSS (box-shadow layers,
+     inline arbitrary values in TSX). Centralized so a future re-theme
+     touches one place. */
+  --alpha-white-06: rgba(255, 255, 255, 0.06);
+  --alpha-white-10: rgba(255, 255, 255, 0.1);
+  --alpha-white-22: rgba(255, 255, 255, 0.22);
+
+  /* Bnot-green halo — hero-narrator progress fill + radial glow. Same
+     brand green as `--color-bnot-green-soft` at three bespoke alphas. */
+  --color-bnot-green-halo: rgba(74, 222, 128, 0.92);
+  --color-bnot-green-halo-mid: rgba(74, 222, 128, 0.55);
+  --color-bnot-green-halo-edge: rgba(74, 222, 128, 0.18);
+
+  /* JetBrains Mono replaces Tailwind's default monospace stack — every
+     `font-mono` utility across the landing app resolves through this. */
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+html,
+body,
+#root {
+  background: var(--color-page-bg);
+  color: var(--color-text-primary);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "Inter Fallback",
+    sans-serif;
+  font-feature-settings:
+    "cv11" on,
+    "ss01" on,
+    "ss03" on;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-active);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--alpha-white-22);
+}
+
+@layer utilities {
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.65 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    opacity: 0.035;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility pixelated {
+  image-rendering: pixelated;
+}
+
+/* ---------------- Keyframes ---------------- */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fadeInOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Processing line's exit: fades and collapses its row height in one go, so
+   the exploration lines below shift up into the freed space instead of
+   leaving a phantom empty row where "Processing…" used to live. The `from`
+   max-height matches the rendered line height (text-[11px] × leading-1.6 ≈
+   17.6px, plus a small cushion for descenders) so the shrink interpolates
+   smoothly across the full animation instead of holding at content height
+   for the first half like 4em would. */
+@keyframes processingFadeOut {
+  from {
+    opacity: 1;
+    max-height: 1.8em;
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+  }
+}
+/* Animates max-height alongside opacity so the pre-reveal row takes 0
+   height — a plain `fadeInOverlay` would leave a blank line between the
+   user prompt and the caret while the slot is invisible. */
+@keyframes processingFadeIn {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1.8em;
+  }
+}
+/* Staggered terminal-line reveal: like fadeInOverlay but also collapses the
+   line's vertical space to 0 until its scripted delay elapses. Without this
+   the caret sits at the bottom of ~6 invisible placeholders waiting to
+   fade in — we want the caret glued to the last rendered row. `both` fill
+   mode keeps the line at max-height:0 pre-delay and locked open post-play. */
+@keyframes terminalLineReveal {
+  from {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+  }
+  to {
+    opacity: 1;
+    max-height: 4em;
+    overflow: hidden;
+  }
+}
+@keyframes radar-pulse {
+  0% {
+    transform: scale(0.35);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+}
+@keyframes blinkCaret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes cursor-pulse {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.85);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes terminal-typing {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+/* Claude Code "thinking" glyph — gently pulses the ✳ star. Mirrors the
+   `✳ Processing…` chrome shown in the real CLI while a model response is
+   mid-stream. */
+@keyframes terminal-processing-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: rotate(90deg);
+  }
+}
+
+/* Hero aurora — two soft green blobs that drift behind the h1 to give the
+   page a center of gravity and reinforce the brand color. Keeps the falloff
+   smooth (radial-gradient closest-side → transparent) so there's no hard
+   edge. Reduced-motion users get the static halo without the drift. */
+@keyframes hero-aurora-a {
+  0% {
+    transform: translate3d(-40px, -18px, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(36px, 14px, 0) scale(1.06);
+  }
+  66% {
+    transform: translate3d(14px, -22px, 0) scale(0.98);
+  }
+  100% {
+    transform: translate3d(-40px, -18px, 0) scale(1);
+  }
+}
+@keyframes hero-aurora-b {
+  0% {
+    transform: translate3d(32px, 12px, 0) scale(1.02);
+  }
+  40% {
+    transform: translate3d(-38px, -16px, 0) scale(0.96);
+  }
+  75% {
+    transform: translate3d(-8px, 22px, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(32px, 12px, 0) scale(1.02);
+  }
+}
+.animate-fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.animate-fade-in-overlay {
+  animation: fadeInOverlay 0.4s ease-out both;
+}
+.animate-pulse-dot {
+  animation: pulseDot 1.6s ease-in-out infinite;
+}
+
+/* Spring-ease curve shared between dynamic-notch.module.css (size morph) and
+   the terminals wrap transition. Global because both consumers reference it. */
+:root {
+  --dn-spring: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+}
+
+/* ------------------------------------------------------------------ */
+/* Button pair — light `glass` + dark variant.                         */
+/* Shared base covers layout, transition, and the press-depress nudge. */
+/* Each variant then sets its palette + multi-layer brushed-metal      */
+/* shadow (the only bit Tailwind can't express cleanly).               */
+/* ------------------------------------------------------------------ */
+
+@layer components {
+  .btn-glass,
+  .btn-dark {
+    @apply inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium tracking-[0.01em] cursor-pointer;
+    transition:
+      background 0.15s ease,
+      transform 0.15s ease;
+
+    &:active {
+      transform: translateY(0.5px);
+    }
+  }
+  .btn-glass-lg,
+  .btn-dark-lg {
+    @apply px-5 py-3 text-[15px] rounded-[10px];
+  }
+
+  .btn-glass {
+    background: #e6e6e6;
+    color: #2f3031;
+    box-shadow:
+      0 0 0 2px rgba(0, 0, 0, 0.5),
+      0 0 14px 0 rgba(255, 255, 255, 0.19),
+      inset 0 -1px 0.4px 0 rgba(0, 0, 0, 0.2),
+      inset 0 1px 0.4px 0 rgb(255, 255, 255);
+
+    &:hover {
+      background: #f0f0f0;
+    }
+  }
+  .btn-glass-lg {
+    box-shadow:
+      0 0 0 2px rgba(0, 0, 0, 0.55),
+      0 0 20px 0 var(--alpha-white-22),
+      inset 0 -1px 0.5px 0 rgba(0, 0, 0, 0.22),
+      inset 0 1px 0.5px 0 rgb(255, 255, 255);
+  }
+
+  .btn-dark {
+    @apply text-white;
+    background: #1c1d1f;
+    box-shadow:
+      0 0 0 1px var(--color-page-border),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+
+    &:hover {
+      background: #26282b;
+    }
+  }
+  .btn-dark-lg {
+    box-shadow:
+      0 0 0 1px var(--alpha-white-10),
+      inset 0 1px 0 var(--alpha-white-06),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+  }
+}

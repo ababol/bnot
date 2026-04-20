@@ -1,0 +1,65 @@
+/* Notch panel surfaces: card chrome, approval buttons, mode badges. */
+
+/* SessionCard + WorktreeCard outer chrome. State variants (hero ring,
+   cursor highlight, hover bg) layer in from the consumer as utility
+   classes since the two cards have different state vocabularies. */
+.card {
+  position: relative;
+  border-radius: 0.5rem;
+  padding: 0.625rem;
+  flex-shrink: 0;
+  transition:
+    background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Approval Yes/Don't ask again/No buttons. Font-size stays inline so
+   the longest label can drop a point to fit the same flex track. */
+.approvalBtnPrimary,
+.approvalBtnSecondary {
+  flex: 1 1 0%;
+  border-radius: 0.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.approvalBtnPrimary {
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+  font-weight: 600;
+
+  &:hover {
+    background: #ffffff;
+  }
+}
+.approvalBtnSecondary {
+  background: var(--color-surface-active);
+  color: #ffffff;
+  font-weight: 500;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+/* PLAN/AUTO badges (cyan) and YOLO badge (red). Identical chrome,
+   independent palettes. */
+.modeBadgeCyan,
+.modeBadgeRed {
+  flex-shrink: 0;
+  border-radius: 0.25rem;
+  padding: 1px 0.25rem;
+  font-size: 9px;
+  font-weight: 700;
+}
+.modeBadgeCyan {
+  background: color-mix(in oklab, var(--color-bnot-cyan) 10%, transparent);
+  color: var(--color-bnot-cyan);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-bnot-cyan) 30%, transparent);
+}
+.modeBadgeRed {
+  background: color-mix(in oklab, var(--color-bnot-red) 10%, transparent);
+  color: var(--color-bnot-red);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-bnot-red) 30%, transparent);
+}

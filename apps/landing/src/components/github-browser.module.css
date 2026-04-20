@@ -1,0 +1,75 @@
+/* GitHub PR mock for the Launch tab: CTA + tab chrome shared by
+   RepoTab and SubTab. */
+
+/* Open in worktree CTA. The three states are mutually exclusive:
+   clickable implies !launched, launched implies !clickable. */
+.openButtonIdle,
+.openButtonDisabled,
+.openButtonLaunched {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.375rem;
+  padding: 7px 0.75rem;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.openButtonIdle {
+  background: #238636;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 1px #2ea043,
+    0 6px 18px -8px rgba(46, 160, 67, 0.55);
+
+  &:hover {
+    background: #2ea043;
+  }
+}
+.openButtonDisabled {
+  background: rgba(35, 134, 54, 0.7);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: default;
+  box-shadow: 0 0 0 1px rgba(46, 160, 67, 0.5);
+}
+.openButtonLaunched {
+  background: color-mix(in oklab, var(--color-bnot-green) 20%, transparent);
+  color: var(--color-bnot-green);
+  cursor: default;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-bnot-green) 40%, transparent);
+}
+
+/* RepoTab + SubTab chrome (header nav + PR sub-nav). */
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.tabActive {
+  font-weight: 600;
+  color: #ffffff;
+}
+.tabBadge {
+  border-radius: 999px;
+  padding: 1px 0.375rem;
+  font-size: 9px;
+  background: var(--alpha-white-06);
+}
+.tabBadgeActive {
+  background: var(--alpha-white-10);
+}
+/* GitHub's brand-orange tab underline. */
+.tabUnderline {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  border-top-left-radius: 0.25rem;
+  border-top-right-radius: 0.25rem;
+  background: #f78166;
+}

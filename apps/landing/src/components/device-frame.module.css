@@ -1,0 +1,29 @@
+/* ------------------------------------------------------------------ */
+/* Custom cursor — only inside the device frame.                       */
+/* White pixel-art arrow with a black 1px outline, 1-up classic mac    */
+/* shape. Kept tiny (16px) so it reads as "fake cursor" and not a      */
+/* system pointer. Buttons / links / notch chrome get the green        */
+/* variant so clickable affordances still announce themselves.         */
+/* ------------------------------------------------------------------ */
+
+.demoArea,
+.demoArea * {
+  cursor:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='M1 1 L1 11 L3.5 8.5 L5.5 13 L7 12.2 L5 8 L9 8 Z' fill='white' stroke='black' stroke-width='1' stroke-linejoin='miter'/></svg>")
+      1 1,
+    default;
+}
+
+/* `:global` keeps the child selectors unscoped so the rule matches plain
+   `notch-clickable` + Tailwind's `cursor-pointer` applied from other files. */
+.demoArea :global(.notch-clickable),
+.demoArea :global(.notch-clickable) *,
+.demoArea [role="button"],
+.demoArea button,
+.demoArea a,
+.demoArea :global(.cursor-pointer) {
+  cursor:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='M1 1 L1 11 L3.5 8.5 L5.5 13 L7 12.2 L5 8 L9 8 Z' fill='%234ade80' stroke='black' stroke-width='1' stroke-linejoin='miter'/></svg>")
+      1 1,
+    pointer;
+}

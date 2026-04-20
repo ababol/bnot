@@ -1,0 +1,43 @@
+/* ------------------------------------------------------------------ */
+/* External link with a gradient-grow underline — no pure-Tailwind     */
+/* equivalent for the `background-size` animation on a currentColor    */
+/* linear-gradient line, so it lives here.                             */
+/* ------------------------------------------------------------------ */
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  color: var(--color-text-muted);
+  transition: color 0.15s ease;
+}
+.link:hover {
+  color: var(--color-text-primary);
+}
+
+/* 1px-tall currentColor line drawn via background-image so the underline
+   rides the live text color — :hover grows background-size from 0%→100%. */
+.label {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0% 1px;
+  padding-bottom: 1px;
+  transition:
+    background-size 0.25s ease,
+    color 0.18s ease;
+}
+.link:hover .label {
+  background-size: 100% 1px;
+}
+
+.icon {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.link:hover .icon {
+  transform: translate(1px, -1px);
+}

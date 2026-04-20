@@ -1,0 +1,74 @@
+/* ------------------------------------------------------------------ */
+/* Hero narrator — 3-up indicator below the demo.                     */
+/* Three baseline segments + a sliding highlight whose box-shadow     */
+/* halo paints the active lane in bnot-green. Width + transform       */
+/* transitions match the demo's cycle cadence so the active segment   */
+/* and the green fill grow/shrink in lockstep.                        */
+/* ------------------------------------------------------------------ */
+
+.segment {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--alpha-white-10);
+  cursor: pointer;
+  transition:
+    width 0.6s cubic-bezier(0.5, 0, 0.2, 1),
+    background-color 0.3s ease;
+}
+/* Active segment's base track is dimmer so the bright green progress fill
+   reads cleanly against it — the inactive-segment gray would muddy it. */
+.segment[data-active="true"] {
+  background: var(--alpha-white-06);
+}
+.segment:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.highlight {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+  transition:
+    transform 0.75s cubic-bezier(0.5, 0, 0.2, 1),
+    width 0.6s cubic-bezier(0.5, 0, 0.2, 1);
+}
+
+/* scaleX is driven by the cycle RAF via inline style — no CSS transition
+   here so the fill tracks the cycle progress instead of easing behind it. */
+.progress {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--color-bnot-green-halo);
+  transform-origin: left center;
+}
+
+/* Small radial hot-spot that rides the progress front. `left` is set
+   inline (progress * 100%); transform centers the circle on that point
+   so the glow stays tight around the fill edge instead of blanketing
+   the whole active segment. */
+.halo {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    var(--color-bnot-green-halo-mid) 0%,
+    var(--color-bnot-green-halo-edge) 45%,
+    transparent 80%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segment,
+  .highlight {
+    transition: none;
+  }
+}
