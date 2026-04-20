@@ -61,9 +61,12 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 html,
-body,
-#root {
+body {
   background: var(--color-page-bg);
   color: var(--color-text-primary);
   font-family:

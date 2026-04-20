@@ -27,3 +27,5 @@ bnot-extension-*.zip
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .playwright-mcp/
+.vercel
+.env*.local

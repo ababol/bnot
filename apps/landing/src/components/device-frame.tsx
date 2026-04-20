@@ -76,7 +76,7 @@ export function DeviceFrame({
       <div className="relative rounded-[28px] sm:rounded-[36px] overflow-hidden border border-page-border-strong bg-page-surface-2 shadow-[0_40px_90px_-30px_rgba(15,15,20,0.35)] h-[540px] sm:h-[620px] md:h-[660px]">
         {/* Pastoral desktop wallpaper */}
         <img
-          src="/bnot/hero.webp"
+          src={`${import.meta.env.BASE_URL}hero.webp`}
           alt=""
           aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover scale-105"
