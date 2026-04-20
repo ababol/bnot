@@ -50,7 +50,7 @@ export function DeviceFrame({
   onSwitchTab,
 }: DeviceFrameProps) {
   const demoAreaRef = useRef<HTMLDivElement | null>(null);
-  const { cursorPos, cancelled, cursorVariant } = useAutoplay(
+  const { cursorPos, cancelled, cursorVariant, cursorMoveMs } = useAutoplay(
     tab,
     phases,
     demoAreaRef,
@@ -142,7 +142,14 @@ export function DeviceFrame({
         {/* Fake cursor — drives to autopilot targets. Visible until the user
             actually clicks (cancelled=true), so even when a real cursor hovers
             the frame, the demo narrative keeps playing. */}
-        {!cancelled && <FakeCursor pulseKey={tab.id} autoPos={cursorPos} variant={cursorVariant} />}
+        {!cancelled && (
+          <FakeCursor
+            pulseKey={tab.id}
+            autoPos={cursorPos}
+            variant={cursorVariant}
+            moveMs={cursorMoveMs}
+          />
+        )}
 
         {/* Soft bottom fade so the "desktop" blends into the page */}
         <div className="absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-page-bg/80 via-page-bg/15 to-transparent pointer-events-none z-20" />

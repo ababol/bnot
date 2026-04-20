@@ -14,7 +14,7 @@ const FAQS: FaqItem[] = [
   },
   {
     q: "How is Bnot different from other Vibe Code notch apps?",
-    a: "Bnot is built exclusively for Claude Code, not a generic \u201CAI agent\u201D wrapper. That focus lets us tune every surface (exact token counts, diff-aware approvals, plan-mode badges, /color tab sync) around Claude Code's real behavior instead of a lowest-common-denominator API. And it's more than just a menu-bar app: the optional Chrome extension adds an Open in worktree button on GitHub PR pages, so your notch and your code-review flow share the same muscle memory.",
+    a: "Bnot is built exclusively for Claude Code, not a generic \u201CAI agent\u201D wrapper. That focus lets us tune every surface (exact token counts, diff-aware approvals, plan-mode badges, /color tab sync) around Claude Code's real behavior instead of a lowest-common-denominator API. And Bnot doesn't stop at the notch: the optional Chrome extension adds an Open in worktree button on GitHub PR pages, so your notch and your code-review flow share the same muscle memory.",
   },
   {
     q: "Can I approve permission requests without switching to the terminal?",
@@ -22,7 +22,7 @@ const FAQS: FaqItem[] = [
   },
   {
     q: "Will this slow down my Mac?",
-    a: "Bnot scans for processes every few seconds and goes idle when nothing is running. Memory footprint is small (Tauri + a sidecar Node process). It's been designed to disappear when there's nothing to show.",
+    a: "Barely. Bnot polls for sessions every few seconds and idles the moment your terminal goes quiet. Built on Tauri with a small Node sidecar, it sips memory and stays out of your way until something actually needs your attention.",
   },
   {
     q: "Does it work on external monitors?",

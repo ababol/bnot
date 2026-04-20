@@ -12,6 +12,8 @@ type FakeCursorProps = {
    *  on the moment the cursor heads toward a clickable target so the
    *  affordance reads before the click lands. */
   variant: CursorVariant;
+  /** Per-step transform transition duration in ms. */
+  moveMs: number;
 };
 
 /**
@@ -21,7 +23,7 @@ type FakeCursorProps = {
  * flips to "pointer" (a pointing hand) the moment the cursor starts moving
  * toward a clickable target, mirroring the browser's native affordance.
  */
-export function FakeCursor({ pulseKey, autoPos, variant }: FakeCursorProps) {
+export function FakeCursor({ pulseKey, autoPos, variant, moveMs }: FakeCursorProps) {
   const [pulsing, setPulsing] = useState(false);
   const firstRenderRef = useRef(true);
 
@@ -40,8 +42,11 @@ export function FakeCursor({ pulseKey, autoPos, variant }: FakeCursorProps) {
   return (
     // z-50 sits above the notch (z-30) and terminals (z-20) inside the device frame.
     <div
-      className="absolute left-0 top-0 w-[30px] h-[36px] pointer-events-none z-50 drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)] transition-transform duration-[1050ms] ease-[cubic-bezier(0.2,0.55,0.2,1)]"
-      style={{ transform: `translate(${autoPos.x}px, ${autoPos.y}px)` }}
+      className="absolute left-0 top-0 w-[30px] h-[36px] pointer-events-none z-50 drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)] transition-transform ease-[cubic-bezier(0.2,0.55,0.2,1)]"
+      style={{
+        transform: `translate(${autoPos.x}px, ${autoPos.y}px)`,
+        transitionDuration: `${moveMs}ms`,
+      }}
       aria-hidden="true"
     >
       <div

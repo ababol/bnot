@@ -5,17 +5,17 @@ const NARRATIVES: Record<Tab["id"], { title: string; description: string }> = {
   launch: {
     title: "From GitHub to Bnot.",
     description:
-      "Open any GitHub issue in a fresh worktree. Claude is already typing your task before Ghostty hits the screen.",
+      "Jump from any GitHub issue into a fresh worktree. Skip the checkout dance, skip the tab hunt.",
   },
   approve: {
     title: "Permissions in the notch.",
     description:
-      "Edit, Bash, Write: every gate lands as a one-click decision on the diff, then the agent keeps going.",
+      "Every permission request lands with a full diff preview. Approve, deny, or allow-always without leaving the notch.",
   },
   resume: {
     title: "Every session, one keystroke.",
     description:
-      "Jump to a running worktree or spawn a fresh `claude --resume` tab. No tab-shuffle, no lost context.",
+      "Every worktree is one click away. Active sessions snap to their Ghostty tab; idle ones spin up a fresh resume.",
   },
 };
 

@@ -386,9 +386,6 @@ export function Terminals({
                 );
               })}
             </div>
-            <div className="ml-auto shrink-0 text-[10px] font-mono text-white/35">
-              {activeSession.workingDirectory ? shortenPath(activeSession.workingDirectory) : ""}
-            </div>
           </div>
         </div>
         <div className={[styles.body, elevated ? styles.bodyElevated : ""].join(" ")}>

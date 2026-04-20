@@ -5,12 +5,18 @@ import type { Tab } from "../lib/tabs";
 type CursorPos = { x: number; y: number };
 export type CursorVariant = "arrow" | "pointer";
 
+/** Fallback transition duration applied to the seed teleport and idle drift —
+ *  scripted beats override this via `target.moveMs`. */
+const DEFAULT_MOVE_MS = 700;
+
 type AutoplayTarget = {
   selector: string;
   /** ms to wait after the tab state settles before starting the cursor move. */
   settleMs: number;
-  /** ms the cursor takes to move to the target. Must match the transform
-   *  transition duration on the fake cursor's root div in fake-cursor.tsx. */
+  /** ms the cursor takes to move to the target. Surfaced through the hook
+   *  so `FakeCursor` can apply a matching `transition-duration` per step
+   *  — that way each beat can pick its own pace without drift between the
+   *  CSS transition and the click timer. */
   moveMs: number;
   /** Cursor shape to use once the cursor lands on the target. "pointer" for
    *  clickable bnot UI inside the notch, "arrow" for chrome elsewhere
@@ -28,8 +34,8 @@ function targetFor(tab: Tab, phases: Phases, notchExpanded: boolean): AutoplayTa
   if (tab.id === "launch" && phases.launch.kind === "idle") {
     return {
       selector: '[data-autoplay="launch-primary"]',
-      settleMs: 1200,
-      moveMs: 1050,
+      settleMs: 1000,
+      moveMs: 700,
       // Pointer (pointing-hand) because the target is the "Open in worktree"
       // button — the hand is the universal web cue for "this is clickable",
       // so it flips on as soon as the cursor starts heading there.
@@ -42,8 +48,8 @@ function targetFor(tab: Tab, phases: Phases, notchExpanded: boolean): AutoplayTa
     // long enough for the user to read the diff before clicking Yes.
     return {
       selector: '[data-autoplay="approve-primary"]',
-      settleMs: 2500,
-      moveMs: 1050,
+      settleMs: 1470,
+      moveMs: 700,
       variant: "pointer",
     };
   }
@@ -59,26 +65,25 @@ function targetFor(tab: Tab, phases: Phases, notchExpanded: boolean): AutoplayTa
     if (!notchExpanded) {
       return {
         selector: '[data-autoplay="approve-expand"]',
-        settleMs: 500,
-        moveMs: 700,
+        settleMs: 300,
+        moveMs: 500,
         variant: "pointer",
       };
     }
     return {
       selector: '[data-autoplay="approve-next"]',
-      // Wait for the notch expand animation (~550ms CSS spring) before moving
-      // — otherwise the cursor locks onto a mid-animation pill position and
-      // visibly misses as the panel finishes opening.
-      settleMs: 650,
-      moveMs: 900,
+      // Coupled to the notch width/height spring in dynamic-notch.module.css —
+      // see the comment there.
+      settleMs: 400,
+      moveMs: 600,
       variant: "pointer",
     };
   }
   if (tab.id === "resume" && phases.resume.kind === "idle") {
     return {
       selector: '[data-autoplay="resume-primary"]',
-      settleMs: 1100,
-      moveMs: 1050,
+      settleMs: 800,
+      moveMs: 700,
       variant: "pointer",
     };
   }
@@ -99,9 +104,15 @@ export function useAutoplay(
   demoAreaRef: RefObject<HTMLElement | null>,
   resumeKey: number = 0,
   notchExpanded: boolean = true,
-): { cursorPos: CursorPos | null; cancelled: boolean; cursorVariant: CursorVariant } {
+): {
+  cursorPos: CursorPos | null;
+  cancelled: boolean;
+  cursorVariant: CursorVariant;
+  cursorMoveMs: number;
+} {
   const [cursorPos, setCursorPos] = useState<CursorPos | null>(null);
   const [cursorVariant, setCursorVariant] = useState<CursorVariant>("arrow");
+  const [cursorMoveMs, setCursorMoveMs] = useState<number>(DEFAULT_MOVE_MS);
   const [cancelled, setCancelled] = useState(false);
   const [visible, setVisible] = useState(false);
   const cancelledRef = useRef(cancelled);
@@ -193,6 +204,7 @@ export function useAutoplay(
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const areaRect = area.getBoundingClientRect();
+      setCursorMoveMs(target.moveMs);
       setCursorPos({
         x: rect.left - areaRect.left + rect.width / 2,
         y: rect.top - areaRect.top + rect.height / 2,
@@ -231,5 +243,5 @@ export function useAutoplay(
     notchExpanded,
   ]);
 
-  return { cursorPos, cancelled, cursorVariant };
+  return { cursorPos, cancelled, cursorVariant, cursorMoveMs };
 }

@@ -149,10 +149,16 @@
 }
 
 @media (max-width: 640px) {
-  .body {
+  /* Scoped to non-elevated so the elevated body keeps filling its terminal —
+     plain `.body` would override `.bodyElevated`'s own overrides on a
+     specificity tie. */
+  .body:not(.bodyElevated) {
     font-size: 10px;
     min-height: 90px;
     max-height: 140px;
+  }
+  .bodyElevated {
+    font-size: 10px;
   }
 }
 
