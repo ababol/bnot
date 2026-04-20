@@ -6,24 +6,18 @@ export function Nav() {
     <nav className="px-6 py-5 flex items-center justify-between max-w-7xl mx-auto">
       <BnotMark hoverAnim />
 
-      <div className="hidden md:flex items-center gap-8">
+      <div className="hidden md:flex items-center gap-10">
         <a
           href="#features"
-          className="text-sm text-text-muted hover:text-text-primary transition-colors"
+          className="text-sm font-medium text-text-muted hover:text-text-primary transition-colors"
         >
           Features
         </a>
         <a
           href="#faq"
-          className="text-sm text-text-muted hover:text-text-primary transition-colors"
+          className="text-sm font-medium text-text-muted hover:text-text-primary transition-colors"
         >
           FAQ
-        </a>
-        <a
-          href="https://github.com/ababol/bnot/releases/latest"
-          className="text-sm text-text-muted hover:text-text-primary transition-colors"
-        >
-          Releases
         </a>
       </div>
 
