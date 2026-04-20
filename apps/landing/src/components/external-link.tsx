@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import type { AnchorHTMLAttributes, ReactNode } from "react";
 import styles from "./external-link.module.css";
 
@@ -14,23 +15,7 @@ export function ExternalLink({ children, className, ...rest }: Props) {
       rel={rest.rel ?? "noreferrer"}
     >
       <span className={styles.label}>{children}</span>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 16 16"
-        width="16"
-        height="16"
-        aria-hidden="true"
-        className={styles.icon}
-      >
-        <path
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.5"
-          d="M6.25 3.75h6m0 0v6m0-6-8.5 8.5"
-        />
-      </svg>
+      <ArrowUpRight size={16} strokeWidth={1.5} className={styles.icon} />
     </a>
   );
 }

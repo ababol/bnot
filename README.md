@@ -8,6 +8,8 @@
 
 **Every session, every worktree — one glance, one keystroke away.**
 
+[**bnot.app**](https://www.bnot.app/) · [Chrome extension](https://chromewebstore.google.com/detail/bnot-open-in-worktree/adnnijpecjdlmkkbhajlgigikfdihhpl)
+
 <br />
 
 <img src="docs/images/notch.png" width="720" alt="Bnot notch panel" />
@@ -38,7 +40,7 @@ One glance — you know. One keystroke — you're back in the code.
 - **Approve from the notch** — Claude's permission requests show up with diff previews. Approve, deny, or allow-always without leaving the notch.
 - **Plan-mode aware** — sessions in plan mode show an animated `PLAN` badge, so you know when Claude is drafting vs. executing.
 - **Answer questions instantly** — `AskUserQuestion` prompts render inline, with multi-select checkboxes and step-by-step flows for multi-question asks. No context switch.
-- **Worktree-first PRs** — an optional Chrome extension adds an "Open in worktree" button on GitHub PR pages that spins up a git worktree and opens it in your terminal.
+- **Worktree-first PRs** — the optional [Chrome extension](https://chromewebstore.google.com/detail/bnot-open-in-worktree/adnnijpecjdlmkkbhajlgigikfdihhpl) adds an "Open in worktree" button on GitHub PR pages that spins up a git worktree and opens it in your terminal.
 - **A bnot per session** — deterministic pixel-art character (color, hat, ears) hashed from your repo + branch, with its color auto-synced to the Claude Code tab via `/color`. The notch and your terminal match at a glance.
 - **Usage & health at a glance** — settings menu surfaces your Claude 5h/7d quota with reset time, hook health with one-click repair, and a check-for-updates button.
 - **Knows when to rest** — idle detection puts the bnot to sleep with a gentle Zzz animation when nothing's running.

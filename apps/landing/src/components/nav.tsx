@@ -24,12 +24,19 @@ export function Nav() {
       <div className="flex items-center gap-3">
         <a
           href="https://github.com/ababol/bnot"
+          target="_blank"
+          rel="noreferrer"
           className="hidden sm:inline-flex items-center gap-1.5 text-sm text-text-muted hover:text-text-primary transition-colors"
         >
           <Github className="w-4 h-4" />
           <span className="hidden md:inline">Star</span>
         </a>
-        <a href="https://github.com/ababol/bnot/releases/latest" className="btn-glass">
+        <a
+          href="https://github.com/ababol/bnot/releases/latest"
+          target="_blank"
+          rel="noreferrer"
+          className="btn-glass"
+        >
           Download
         </a>
       </div>

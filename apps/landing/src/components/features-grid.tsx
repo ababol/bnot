@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import type { ComponentType } from "react";
 
 import { ExternalLink } from "./external-link";
@@ -14,6 +15,8 @@ type Feature = {
   title: string;
   body: string;
   Visual: ComponentType;
+  /** When set, the whole card becomes a link to this URL (opens in a new tab). */
+  href?: string;
 };
 
 const FEATURES: Feature[] = [
@@ -41,6 +44,7 @@ const FEATURES: Feature[] = [
     title: "Chrome extension",
     body: "Jump from any GitHub PR straight into a fresh worktree. Skip the checkout dance, skip the tab hunt.",
     Visual: ChromePR,
+    href: "https://chromewebstore.google.com/detail/bnot-open-in-worktree/adnnijpecjdlmkkbhajlgigikfdihhpl",
   },
   {
     title: "A bnot per session",
@@ -80,16 +84,30 @@ export function FeaturesGrid() {
   );
 }
 
-function FeatureCard({ title, body, Visual }: Feature) {
+function FeatureCard({ title, body, Visual, href }: Feature) {
+  const Tag = href ? "a" : "div";
+  const linkProps = href ? { href, target: "_blank", rel: "noreferrer" } : {};
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-page-surface transition-colors hover:border-white/[0.1]">
+    <Tag
+      {...linkProps}
+      className="group relative block overflow-hidden rounded-2xl border border-white/[0.06] bg-page-surface transition-colors hover:border-white/[0.1]"
+    >
       <div className="relative h-[240px] overflow-hidden bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.04),transparent_55%)]">
         <Visual />
       </div>
       <div className="border-t border-white/[0.04] px-7 pt-6 pb-7">
-        <h3 className="mb-2 text-lg font-medium tracking-[-0.01em] text-text-primary">{title}</h3>
+        <h3 className="mb-2 flex items-center gap-1.5 text-lg font-medium tracking-[-0.01em] text-text-primary">
+          {title}
+          {href && (
+            <ArrowUpRight
+              size={14}
+              strokeWidth={1.5}
+              className="opacity-50 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-[1px] group-hover:-translate-y-[1px]"
+            />
+          )}
+        </h3>
         <p className="text-[15px] leading-relaxed text-text-secondary">{body}</p>
       </div>
-    </div>
+    </Tag>
   );
 }
