@@ -32,9 +32,7 @@ export function Nav() {
           <span className="hidden md:inline">Star</span>
         </a>
         <a
-          href="https://github.com/ababol/bnot/releases/latest"
-          target="_blank"
-          rel="noreferrer"
+          href="https://github.com/ababol/bnot/releases/latest/download/Bnot-universal.dmg"
           className="btn-glass"
         >
           Download

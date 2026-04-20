@@ -29,7 +29,7 @@ const FAQS: FaqItem[] = [
     a: "Bnot pins to the built-in MacBook display (where the notch lives). On external monitors, the notch UX doesn't apply, but you can still hit the global shortcut to bring up the overview panel anywhere.",
   },
   {
-    q: "How do I install it?",
+    q: "How do I install/update it?",
     a: "Download the .dmg from the Releases page, drag Bnot.app to /Applications, launch it. Bnot auto-updates in the background. macOS 14 or later required.",
   },
 ];
