@@ -295,17 +295,20 @@ export class SessionManager {
       }
 
       case "sessionEnd": {
-        // Don't mark completed or bump lastActivity here — Claude Code fires
-        // SessionEnd for mid-session events too (compaction, prompt-input-exit,
-        // /clear). Real session death is detected by the orphan sweep's
-        // kill(pid,0) + comm check; that's authoritative.
+        // Fired both at real turn end (Stop hook, reason="completed") and
+        // mid-session (SessionEnd hook, reason="terminated", e.g. compaction /
+        // prompt-input-exit / /clear). Don't mark the session completed here —
+        // process death via the orphan sweep is authoritative. Only suppress
+        // STALE_TURN_EVENTS on the real turn-end flavor; otherwise the next
+        // mid-turn preToolUse would be silently dropped at line 112.
+        const p = payload.sessionEnd;
         if (this.sessions[sessionId]) {
           this.sessions[sessionId].isThinking = false;
           this.sessions[sessionId].currentTool = undefined;
         }
-        // Suppress STALE_TURN_EVENTS until the next userPromptSubmit clears the flag,
-        // otherwise a late hook from this turn would re-arm isThinking.
-        this.idleSessions.add(sessionId);
+        if (p?.reason === "completed") {
+          this.idleSessions.add(sessionId);
+        }
         delete this.pendingApprovalClients[sessionId];
         break;
       }

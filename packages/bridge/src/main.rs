@@ -9,7 +9,7 @@ mod hook_input;
 use hook_input::ClaudeHookInput;
 
 const SOCKET_PATH: &str = ".bnot/bnot.sock";
-const APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
+const APPROVAL_TIMEOUT: Duration = Duration::from_secs(600);
 
 #[derive(Deserialize)]
 struct ApprovalResponse {
