@@ -326,7 +326,7 @@ const FOOTER_SECTIONS: Array<{
       { label: "FAQ", href: "#faq" },
       {
         label: "Download",
-        href: "https://github.com/ababol/bnot/releases/latest/download/Bnot-universal.dmg",
+        href: "https://github.com/ababol/bnot/releases/latest/download/Bnot.dmg",
       },
     ],
   },

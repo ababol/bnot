@@ -114,13 +114,15 @@ jobs:
           args: --target universal-apple-darwin
           projectPath: apps/desktop
 
-      # Upload a stable-named copy of the DMG so the landing-page Download
-      # button can link to a URL that doesn't change every release.
-      - name: Upload stable-named DMG
+      # Replace tauri-action's versioned DMG with a single stable-named asset
+      # so the landing-page Download button can link to a URL that doesn't
+      # change every release. The auto-updater reads latest.json which points
+      # at the .app.tar.gz, not the DMG, so dropping the versioned DMG is safe.
+      - name: Replace versioned DMG with Bnot.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
           DMG=$(ls target/universal-apple-darwin/release/bundle/dmg/Bnot_*_universal.dmg)
-          cp "$DMG" "$RUNNER_TEMP/Bnot-universal.dmg"
-          gh release upload "$TAG" "$RUNNER_TEMP/Bnot-universal.dmg" --clobber
+          gh release delete-asset "$TAG" "$(basename "$DMG")" --yes || true
+          gh release upload "$TAG" "$DMG#Bnot.dmg" --clobber

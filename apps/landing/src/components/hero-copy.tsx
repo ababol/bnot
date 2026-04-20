@@ -49,7 +49,7 @@ export const HeroCopy = memo(function HeroCopy() {
 
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
         <a
-          href="https://github.com/ababol/bnot/releases/latest/download/Bnot-universal.dmg"
+          href="https://github.com/ababol/bnot/releases/latest/download/Bnot.dmg"
           className="btn-glass btn-glass-lg"
         >
           <AppleLogo />
